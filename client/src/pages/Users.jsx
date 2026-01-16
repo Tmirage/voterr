@@ -1,0 +1,340 @@
+import { useState, useEffect } from 'react';
+import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Users as UsersIcon, UserPlus, Trash2, Download, Shield, ShieldOff } from 'lucide-react';
+import clsx from 'clsx';
+import ConfirmModal from '../components/ConfirmModal';
+
+export default function Users() {
+  const { user } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [plexFriends, setPlexFriends] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddLocal, setShowAddLocal] = useState(false);
+  const [showImportPlex, setShowImportPlex] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', email: '' });
+  const [selectedFriends, setSelectedFriends] = useState(new Set());
+  const [confirmModal, setConfirmModal] = useState(null);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  async function loadUsers() {
+    try {
+      const data = await api.get('/users');
+      setUsers(data);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadPlexFriends() {
+    try {
+      const friends = await api.get('/users/plex-friends');
+      setPlexFriends(friends);
+      setShowImportPlex(true);
+    } catch (error) {
+      console.error('Failed to load Plex friends:', error);
+    }
+  }
+
+  async function handleImportPlex(friends) {
+    try {
+      for (const friend of friends) {
+        await api.post('/users/import-plex', friend);
+      }
+      await loadUsers();
+      setPlexFriends(plexFriends.filter(f => !friends.some(fr => fr.plexId === f.plexId)));
+      setSelectedFriends(new Set());
+    } catch (error) {
+      console.error('Failed to import users:', error);
+    }
+  }
+
+  function toggleFriendSelection(friend) {
+    const newSelected = new Set(selectedFriends);
+    if (newSelected.has(friend.plexId)) {
+      newSelected.delete(friend.plexId);
+    } else {
+      newSelected.add(friend.plexId);
+    }
+    setSelectedFriends(newSelected);
+  }
+
+  function selectAllFriends() {
+    if (selectedFriends.size === plexFriends.length) {
+      setSelectedFriends(new Set());
+    } else {
+      setSelectedFriends(new Set(plexFriends.map(f => f.plexId)));
+    }
+  }
+
+  async function handleToggleAdmin(userId) {
+    try {
+      await api.patch(`/users/${userId}/admin`);
+      await loadUsers();
+    } catch (error) {
+      console.error('Failed to toggle admin:', error);
+    }
+  }
+
+  async function handleCreateLocal(e) {
+    e.preventDefault();
+    if (!newUser.username.trim()) return;
+
+    try {
+      await api.post('/users/local', newUser);
+      await loadUsers();
+      setShowAddLocal(false);
+      setNewUser({ username: '', email: '' });
+    } catch (error) {
+      console.error('Failed to create user:', error);
+    }
+  }
+
+  function handleDelete(userId) {
+    setConfirmModal({
+      title: 'Delete User',
+      message: 'Delete this user? This cannot be undone.',
+      confirmText: 'Delete',
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/users/${userId}`);
+          setUsers(users.filter(u => u.id !== userId));
+        } catch (error) {
+          console.error('Failed to delete user:', error);
+        }
+        setConfirmModal(null);
+      }
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl text-white">Users</h1>
+          <p className="text-gray-400">Manage Plex and local users</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={loadPlexFriends}
+            className="flex items-center gap-2 px-4 py-2 bg-[#e5a00d] hover:bg-[#cc8f0c] text-black rounded-lg transition-colors"
+          >
+            <Download className="h-5 w-5" />
+            Import Plex
+          </button>
+          <button
+            onClick={() => setShowAddLocal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+          >
+            <UserPlus className="h-5 w-5" />
+            Add Local
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-700">
+          <h2 className="text-lg text-white">All Users ({users.length})</h2>
+        </div>
+
+        <div className="divide-y divide-gray-700">
+          {users.map((u) => (
+            <div key={u.id} className="px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {u.avatarUrl ? (
+                  <img
+                    src={u.avatarUrl}
+                    alt={u.username}
+                    className="h-10 w-10 rounded-full"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-gray-600 flex items-center justify-center text-white">
+                    {u.username[0].toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-white">{u.username}</p>
+                  <p className="text-sm text-gray-400">
+                    {u.isLocal ? 'Local User' : 'Plex User'}
+                    {u.isAdmin && ' • Admin'}
+                  </p>
+                </div>
+              </div>
+              {user.isAdmin && u.id !== user.id && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleToggleAdmin(u.id)}
+                    className={clsx(
+                      "p-2 transition-colors",
+                      u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
+                    )}
+                    title={u.isAdmin ? "Remove admin" : "Make admin"}
+                  >
+                    {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(u.id)}
+                    className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showAddLocal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-xl text-white mb-4">Add Local User</h2>
+            <form onSubmit={handleCreateLocal} className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Email (optional)</label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLocal(false)}
+                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newUser.username.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showImportPlex && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h2 className="text-xl text-white mb-4">Import Plex Friends</h2>
+            
+            {plexFriends.length === 0 ? (
+              <p className="text-gray-400">No Plex friends available to import</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <button
+                    onClick={selectAllFriends}
+                    className="text-sm text-indigo-400 hover:text-indigo-300"
+                  >
+                    {selectedFriends.size === plexFriends.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                  <span className="text-sm text-gray-400">{selectedFriends.size} selected</span>
+                </div>
+                <div className="space-y-2">
+                  {plexFriends.map((friend) => (
+                    <button
+                      key={friend.plexId}
+                      onClick={() => toggleFriendSelection(friend)}
+                      className={clsx(
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                        selectedFriends.has(friend.plexId) 
+                          ? "bg-indigo-600/30 border border-indigo-500" 
+                          : "bg-gray-700 hover:bg-gray-600"
+                      )}
+                    >
+                      <div className={clsx(
+                        "w-5 h-5 rounded border flex items-center justify-center",
+                        selectedFriends.has(friend.plexId) 
+                          ? "bg-indigo-600 border-indigo-600" 
+                          : "border-gray-500"
+                      )}>
+                        {selectedFriends.has(friend.plexId) && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      {friend.avatarUrl ? (
+                        <img src={friend.avatarUrl} alt={friend.username} className="h-8 w-8 rounded-full" />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-gray-600 flex items-center justify-center text-sm text-white">
+                          {friend.username[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="text-left">
+                        <p className="text-white">{friend.username}</p>
+                        {friend.email && (
+                          <p className="text-xs text-gray-400">{friend.email}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => { setShowImportPlex(false); setSelectedFriends(new Set()); }}
+                className="flex-1 px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              {selectedFriends.size > 0 && (
+                <button
+                  onClick={() => handleImportPlex(plexFriends.filter(f => selectedFriends.has(f.plexId)))}
+                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                >
+                  Import {selectedFriends.size} user{selectedFriends.size > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          destructive={confirmModal.destructive}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+    </div>
+  );
+}

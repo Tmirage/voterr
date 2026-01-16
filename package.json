@@ -1,0 +1,38 @@
+{
+  "name": "voterr",
+  "version": "1.0.0",
+  "description": "Film voting platform for movie nights - integrates with Plex, Radarr, and Tautulli",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "node server/index.js",
+    "db:migrate": "node server/db/migrate.js"
+  },
+  "keywords": [
+    "plex",
+    "radarr",
+    "tautulli",
+    "movie",
+    "voting",
+    "film"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "multer": "^2.0.2",
+    "nanoid": "^5.0.9",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,131 @@
+import { getSetting } from './settings.js';
+
+const TIMEOUT_MS = 5000;
+const CIRCUIT_BREAKER_DURATION = 5 * 60 * 1000;
+let lastFailure = null;
+let lastFailureTime = 0;
+let circuitOpen = false;
+let circuitOpenUntil = 0;
+
+export function getTautulliStatus() {
+  const { configured } = getTautulliConfig();
+  if (!configured) return { configured: false };
+  
+  const now = Date.now();
+  if (circuitOpen && now < circuitOpenUntil) {
+    const remainingMs = circuitOpenUntil - now;
+    const remainingMin = Math.ceil(remainingMs / 60000);
+    return { 
+      configured: true, 
+      failed: true, 
+      error: lastFailure,
+      circuitOpen: true,
+      remainingMinutes: remainingMin
+    };
+  }
+  
+  if (circuitOpen && now >= circuitOpenUntil) {
+    circuitOpen = false;
+  }
+  
+  if (lastFailure && (now - lastFailureTime) < 60000) {
+    return { configured: true, failed: true, error: lastFailure };
+  }
+  return { configured: true, failed: false };
+}
+
+export function retryTautulli() {
+  circuitOpen = false;
+  circuitOpenUntil = 0;
+  lastFailure = null;
+  lastFailureTime = 0;
+}
+
+function isCircuitOpen() {
+  if (!circuitOpen) return false;
+  if (Date.now() >= circuitOpenUntil) {
+    circuitOpen = false;
+    return false;
+  }
+  return true;
+}
+
+function getTautulliConfig() {
+  const url = getSetting('tautulli_url');
+  const apiKey = getSetting('tautulli_api_key');
+  return { url, apiKey, configured: !!(url && apiKey) };
+}
+
+async function tautulliRequest(cmd, params = {}) {
+  if (isCircuitOpen()) {
+    return null;
+  }
+
+  const { url: tautulliUrl, apiKey, configured } = getTautulliConfig();
+  
+  if (!configured) {
+    return null;
+  }
+
+  const url = new URL(`${tautulliUrl}/api/v2`);
+  url.searchParams.set('apikey', apiKey);
+  url.searchParams.set('cmd', cmd);
+  
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url.toString(), { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      lastFailure = `HTTP ${response.status}`;
+      lastFailureTime = Date.now();
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (data.response?.result !== 'success') {
+      lastFailure = data.response?.message || 'Unknown error';
+      lastFailureTime = Date.now();
+      return null;
+    }
+
+    lastFailure = null;
+    lastFailureTime = 0;
+    return data.response.data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    lastFailure = error.name === 'AbortError' ? 'Connection timed out' : error.message;
+    lastFailureTime = Date.now();
+    circuitOpen = true;
+    circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+    return null;
+  }
+}
+
+export async function hasUserWatchedMovie(plexUserId, ratingKey, title) {
+  const history = await tautulliRequest('get_history', {
+    user_id: plexUserId,
+    media_type: 'movie',
+    length: 1000
+  });
+
+  if (!history) return false;
+
+  return (history.data || []).some(item => {
+    if (ratingKey && (item.rating_key === ratingKey || item.rating_key === parseInt(ratingKey))) {
+      return true;
+    }
+    if (title && item.title && item.title.toLowerCase() === title.toLowerCase()) {
+      return true;
+    }
+    return false;
+  });
+}
+

@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  voterr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voterr
+    restart: unless-stopped
+    ports:
+      - "5056:5056"
+    environment:
+      - NODE_ENV=production
+      - PORT=5056
+      - DATABASE_PATH=/app/data/voterr.db
+      - PLEX_CLIENT_ID=${PLEX_CLIENT_ID:-voterr}
+      - PLEX_URL=${PLEX_URL:-http://plex:32400}
+      - PLEX_TOKEN=${PLEX_TOKEN}
+      - TAUTULLI_URL=${TAUTULLI_URL:-http://tautulli:8181}
+      - TAUTULLI_API_KEY=${TAUTULLI_API_KEY}
+      - RADARR_URL=${RADARR_URL:-http://radarr:7878}
+      - RADARR_API_KEY=${RADARR_API_KEY}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+      - TZ=${TZ:-Europe/Amsterdam}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5056/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  data:
