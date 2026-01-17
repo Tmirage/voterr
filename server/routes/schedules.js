@@ -189,7 +189,7 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const nights = db.prepare(`
+  const allNights = db.prepare(`
     SELECT mn.*, 
            s.name as schedule_name,
            u.username as host_name,
@@ -200,10 +200,14 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     LEFT JOIN users u ON mn.host_id = u.id
     LEFT JOIN nominations n ON mn.winning_movie_id = n.id
     WHERE mn.group_id = ?
-    AND mn.date >= date('now')
     ORDER BY mn.date ASC
-    LIMIT 50
   `).all(groupId);
+
+  const now = new Date();
+  const nights = allNights.filter(n => {
+    const nightDateTime = new Date(`${n.date}T${n.time || '23:59'}:00`);
+    return nightDateTime >= now;
+  }).slice(0, 50);
 
   res.json(nights.map(n => ({
     id: n.id,
@@ -237,7 +241,7 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const nights = db.prepare(`
+  const allNights = db.prepare(`
     SELECT mn.*, 
            s.name as schedule_name,
            u.username as host_name,
@@ -248,15 +252,17 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
     LEFT JOIN users u ON mn.host_id = u.id
     LEFT JOIN nominations n ON mn.winning_movie_id = n.id
     WHERE mn.group_id = ?
-    AND mn.date < date('now')
     ORDER BY mn.date DESC
-    LIMIT ? OFFSET ?
-  `).all(groupId, limit, offset);
+  `).all(groupId);
 
-  const totalCount = db.prepare(`
-    SELECT COUNT(*) as count FROM movie_nights 
-    WHERE group_id = ? AND date < date('now')
-  `).get(groupId);
+  const now = new Date();
+  const archivedNights = allNights.filter(n => {
+    const nightDateTime = new Date(`${n.date}T${n.time || '23:59'}:00`);
+    return nightDateTime < now;
+  });
+
+  const nights = archivedNights.slice(offset, offset + limit);
+  const totalCount = { count: archivedNights.length };
 
   res.json({
     nights: nights.map(n => ({
