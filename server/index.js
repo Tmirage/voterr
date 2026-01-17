@@ -3,7 +3,10 @@ import cors from 'cors';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
+
+const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf-8'));
 
 import { initDatabase } from './db/index.js';
 import { initScheduler } from './services/scheduler.js';
@@ -56,7 +59,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/images', imagesRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: pkg.version, timestamp: new Date().toISOString() });
 });
 
 if (process.env.NODE_ENV === 'production') {
