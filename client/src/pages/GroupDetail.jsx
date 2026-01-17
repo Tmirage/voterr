@@ -16,6 +16,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageCropper from '../components/ImageCropper';
+import DatePicker from '../components/DatePicker';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -748,7 +749,7 @@ export default function GroupDetail() {
                   type="text"
                   value={newSchedule.name}
                   onChange={(e) => setNewSchedule({ ...newSchedule, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -756,7 +757,7 @@ export default function GroupDetail() {
                 <select
                   value={newSchedule.recurrenceType}
                   onChange={(e) => setNewSchedule({ ...newSchedule, recurrenceType: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="weekly">Weekly</option>
                   <option value="biweekly">Bi-weekly</option>
@@ -767,12 +768,11 @@ export default function GroupDetail() {
               {newSchedule.recurrenceType === 'none' ? (
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Date</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={newSchedule.fixedDate}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, fixedDate: e.target.value })}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    onChange={(date) => setNewSchedule({ ...newSchedule, fixedDate: date })}
+                    minDate={new Date().toISOString().split('T')[0]}
+                    placeholder="Select date"
                   />
                 </div>
               ) : (
@@ -782,7 +782,7 @@ export default function GroupDetail() {
                     <select
                       value={newSchedule.dayOfWeek}
                       onChange={(e) => setNewSchedule({ ...newSchedule, dayOfWeek: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                     >
                       {DAYS.map((day, i) => (
                         <option key={i} value={i}>{day}</option>
@@ -794,7 +794,7 @@ export default function GroupDetail() {
                     <select
                       value={newSchedule.advanceCount}
                       onChange={(e) => setNewSchedule({ ...newSchedule, advanceCount: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                         <option key={n} value={n}>{n}</option>
@@ -809,7 +809,7 @@ export default function GroupDetail() {
                   type="time"
                   value={newSchedule.time}
                   onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div className="flex gap-3 justify-end">
@@ -843,28 +843,7 @@ export default function GroupDetail() {
                   type="text"
                   value={editingSchedule.name}
                   onChange={(e) => setEditingSchedule({ ...editingSchedule, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Day</label>
-                <select
-                  value={String(editingSchedule.dayOfWeek)}
-                  onChange={(e) => setEditingSchedule({ ...editingSchedule, dayOfWeek: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {DAYS.map((day, i) => (
-                    <option key={i} value={String(i)}>{day}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={editingSchedule.time}
-                  onChange={(e) => setEditingSchedule({ ...editingSchedule, time: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -872,7 +851,7 @@ export default function GroupDetail() {
                 <select
                   value={editingSchedule.recurrenceType || 'weekly'}
                   onChange={(e) => setEditingSchedule({ ...editingSchedule, recurrenceType: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="weekly">Weekly</option>
                   <option value="biweekly">Bi-weekly</option>
@@ -881,19 +860,42 @@ export default function GroupDetail() {
                 </select>
               </div>
               {editingSchedule.recurrenceType !== 'none' && (
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
-                  <select
-                    value={editingSchedule.advanceCount || 1}
-                    onChange={(e) => setEditingSchedule({ ...editingSchedule, advanceCount: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Day</label>
+                    <select
+                      value={String(editingSchedule.dayOfWeek)}
+                      onChange={(e) => setEditingSchedule({ ...editingSchedule, dayOfWeek: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {DAYS.map((day, i) => (
+                        <option key={i} value={String(i)}>{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
+                    <select
+                      value={editingSchedule.advanceCount || 1}
+                      onChange={(e) => setEditingSchedule({ ...editingSchedule, advanceCount: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Time</label>
+                <input
+                  type="time"
+                  value={editingSchedule.time}
+                  onChange={(e) => setEditingSchedule({ ...editingSchedule, time: e.target.value })}
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"
