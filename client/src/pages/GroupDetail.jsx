@@ -54,7 +54,8 @@ export default function GroupDetail() {
     dayOfWeek: 3,
     time: '20:00',
     recurrenceType: 'weekly',
-    advanceCount: 1
+    advanceCount: 1,
+    fixedDate: ''
   });
 
   const RECURRENCE_LABELS = {
@@ -751,27 +752,6 @@ export default function GroupDetail() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Day</label>
-                <select
-                  value={newSchedule.dayOfWeek}
-                  onChange={(e) => setNewSchedule({ ...newSchedule, dayOfWeek: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {DAYS.map((day, i) => (
-                    <option key={i} value={i}>{day}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={newSchedule.time}
-                  onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
                 <label className="block text-sm text-gray-400 mb-1">Recurrence</label>
                 <select
                   value={newSchedule.recurrenceType}
@@ -784,20 +764,54 @@ export default function GroupDetail() {
                   <option value="none">One-time</option>
                 </select>
               </div>
-              {newSchedule.recurrenceType !== 'none' && (
+              {newSchedule.recurrenceType === 'none' ? (
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
-                  <select
-                    value={newSchedule.advanceCount}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, advanceCount: parseInt(e.target.value) })}
+                  <label className="block text-sm text-gray-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={newSchedule.fixedDate}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, fixedDate: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Day</label>
+                    <select
+                      value={newSchedule.dayOfWeek}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, dayOfWeek: parseInt(e.target.value) })}
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {DAYS.map((day, i) => (
+                        <option key={i} value={i}>{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
+                    <select
+                      value={newSchedule.advanceCount}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, advanceCount: parseInt(e.target.value) })}
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Time</label>
+                <input
+                  type="time"
+                  value={newSchedule.time}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"

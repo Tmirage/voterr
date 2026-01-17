@@ -37,10 +37,20 @@ router.get('/group/:groupId', requireNonGuest, (req, res) => {
 });
 
 router.post('/', requireNonGuest, (req, res) => {
-  const { groupId, name, dayOfWeek, time, recurrenceType, advanceCount } = req.body;
+  const { groupId, name, dayOfWeek, time, recurrenceType, advanceCount, fixedDate } = req.body;
 
-  if (!groupId || !name || dayOfWeek === undefined) {
-    return res.status(400).json({ error: 'groupId, name, and dayOfWeek are required' });
+  const validRecurrence = ['weekly', 'biweekly', 'monthly', 'none'].includes(recurrenceType) ? recurrenceType : 'weekly';
+
+  if (!groupId || !name) {
+    return res.status(400).json({ error: 'groupId and name are required' });
+  }
+
+  if (validRecurrence === 'none' && !fixedDate) {
+    return res.status(400).json({ error: 'fixedDate is required for one-time events' });
+  }
+
+  if (validRecurrence !== 'none' && dayOfWeek === undefined) {
+    return res.status(400).json({ error: 'dayOfWeek is required for recurring events' });
   }
 
   const isMember = db.prepare(
@@ -51,15 +61,20 @@ router.post('/', requireNonGuest, (req, res) => {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const validRecurrence = ['weekly', 'biweekly', 'monthly', 'none'].includes(recurrenceType) ? recurrenceType : 'weekly';
   const count = Math.max(1, Math.min(advanceCount || 1, 10));
+  const effectiveDayOfWeek = validRecurrence === 'none' ? new Date(fixedDate).getDay() : dayOfWeek;
 
   const result = db.prepare(`
     INSERT INTO schedules (group_id, name, day_of_week, time, recurrence_type, advance_count, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(groupId, name, dayOfWeek, time || '20:00', validRecurrence, count, req.session.userId);
+  `).run(groupId, name, effectiveDayOfWeek, time || '20:00', validRecurrence, count, req.session.userId);
 
-  if (validRecurrence !== 'none') {
+  if (validRecurrence === 'none') {
+    db.prepare(`
+      INSERT INTO movie_nights (group_id, schedule_id, date, time, status)
+      VALUES (?, ?, ?, ?, 'voting')
+    `).run(groupId, result.lastInsertRowid, fixedDate, time || '20:00');
+  } else {
     for (let i = 0; i < count; i++) {
       const nextDate = getNextDateForRecurrence(dayOfWeek, validRecurrence, i);
       db.prepare(`
