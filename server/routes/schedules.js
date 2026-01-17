@@ -185,6 +185,7 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     LEFT JOIN users u ON mn.host_id = u.id
     LEFT JOIN nominations n ON mn.winning_movie_id = n.id
     WHERE mn.group_id = ?
+    AND mn.date >= date('now')
     ORDER BY mn.date ASC
     LIMIT 50
   `).all(groupId);
@@ -205,6 +206,63 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     cancelReason: n.cancel_reason,
     nominationCount: n.nomination_count
   })));
+});
+
+router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) => {
+  const { groupId } = req.params;
+  const page = parseInt(req.query.page) || 0;
+  const limit = 5;
+  const offset = page * limit;
+
+  const isMember = db.prepare(
+    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
+  ).get(groupId, req.session.userId);
+
+  if (!isMember) {
+    return res.status(403).json({ error: 'Not a member of this group' });
+  }
+
+  const nights = db.prepare(`
+    SELECT mn.*, 
+           s.name as schedule_name,
+           u.username as host_name,
+           n.title as winning_movie_title,
+           (SELECT COUNT(*) FROM nominations WHERE movie_night_id = mn.id) as nomination_count
+    FROM movie_nights mn
+    LEFT JOIN schedules s ON mn.schedule_id = s.id
+    LEFT JOIN users u ON mn.host_id = u.id
+    LEFT JOIN nominations n ON mn.winning_movie_id = n.id
+    WHERE mn.group_id = ?
+    AND mn.date < date('now')
+    ORDER BY mn.date DESC
+    LIMIT ? OFFSET ?
+  `).all(groupId, limit, offset);
+
+  const totalCount = db.prepare(`
+    SELECT COUNT(*) as count FROM movie_nights 
+    WHERE group_id = ? AND date < date('now')
+  `).get(groupId);
+
+  res.json({
+    nights: nights.map(n => ({
+      id: n.id,
+      groupId: n.group_id,
+      scheduleId: n.schedule_id,
+      scheduleName: n.schedule_name,
+      date: n.date,
+      time: n.time,
+      hostId: n.host_id,
+      hostName: n.host_name,
+      winningMovieId: n.winning_movie_id,
+      winningMovieTitle: n.winning_movie_title,
+      status: n.status,
+      isCancelled: n.is_cancelled === 1,
+      cancelReason: n.cancel_reason,
+      nominationCount: n.nomination_count
+    })),
+    hasMore: offset + nights.length < totalCount.count,
+    total: totalCount.count
+  });
 });
 
 router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {

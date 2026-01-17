@@ -36,6 +36,12 @@ export default function GroupDetail() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [movieNights, setMovieNights] = useState([]);
+  const [historyNights, setHistoryNights] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -76,6 +82,32 @@ export default function GroupDetail() {
       console.error('Failed to load group:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadHistory(page = 0) {
+    setLoadingHistory(true);
+    try {
+      const data = await api.get(`/schedules/movie-nights/group/${id}/history?page=${page}`);
+      if (page === 0) {
+        setHistoryNights(data.nights);
+      } else {
+        setHistoryNights(prev => [...prev, ...data.nights]);
+      }
+      setHistoryHasMore(data.hasMore);
+      setHistoryTotal(data.total);
+      setHistoryPage(page);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  function handleShowHistory() {
+    setShowHistory(true);
+    if (historyNights.length === 0) {
+      loadHistory(0);
     }
   }
 
@@ -400,48 +432,115 @@ export default function GroupDetail() {
           </div>
 
           <div className="bg-gray-800 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-700">
-              <h2 className="text-lg text-white">Movie Nights</h2>
+            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className={`text-lg transition-colors ${!showHistory ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  Upcoming
+                </button>
+                <button
+                  onClick={handleShowHistory}
+                  className={`text-lg transition-colors ${showHistory ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  History {historyTotal > 0 && `(${historyTotal})`}
+                </button>
+              </div>
             </div>
 
-            {movieNights.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No movie nights scheduled</p>
-              </div>
+            {!showHistory ? (
+              movieNights.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No upcoming movie nights</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-700">
+                  {movieNights.slice(0, 10).map((night) => (
+                    <Link
+                      key={night.id}
+                      to={`/movie-night/${night.id}`}
+                      className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div>
+                        <p className="text-white">
+                          {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
+                        </p>
+                        <p className="text-sm text-gray-400">
+                          {night.time} • {night.nominationCount || 0} nominations
+                          {night.hostName && ` • Host: ${night.hostName}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {night.isCancelled && (
+                          <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
+                            Cancelled
+                          </span>
+                        )}
+                        {night.status === 'decided' && (
+                          <span className="px-2 py-1 bg-green-600/20 text-green-400 text-xs rounded">
+                            Decided
+                          </span>
+                        )}
+                        <ChevronRight className="h-5 w-5 text-gray-500" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="divide-y divide-gray-700">
-                {movieNights.slice(0, 10).map((night) => (
-                  <Link
-                    key={night.id}
-                    to={`/movie-night/${night.id}`}
-                    className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
-                  >
-                    <div>
-                      <p className="text-white">
-                        {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {night.time} • {night.nominationCount || 0} nominations
-                        {night.hostName && ` • Host: ${night.hostName}`}
-                      </p>
+              loadingHistory && historyNights.length === 0 ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mx-auto"></div>
+                </div>
+              ) : historyNights.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No past movie nights</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="divide-y divide-gray-700">
+                    {historyNights.map((night) => (
+                      <Link
+                        key={night.id}
+                        to={`/movie-night/${night.id}`}
+                        className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div>
+                          <p className="text-white">
+                            {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {night.winningMovieTitle ? `Winner: ${night.winningMovieTitle}` : 'No winner decided'}
+                            {night.hostName && ` • Host: ${night.hostName}`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {night.isCancelled && (
+                            <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
+                              Cancelled
+                            </span>
+                          )}
+                          <ChevronRight className="h-5 w-5 text-gray-500" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  {historyHasMore && (
+                    <div className="p-4 border-t border-gray-700">
+                      <button
+                        onClick={() => loadHistory(historyPage + 1)}
+                        disabled={loadingHistory}
+                        className="w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+                      >
+                        {loadingHistory ? 'Loading...' : 'Load more'}
+                      </button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {night.isCancelled && (
-                        <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
-                          Cancelled
-                        </span>
-                      )}
-                      {night.status === 'decided' && (
-                        <span className="px-2 py-1 bg-green-600/20 text-green-400 text-xs rounded">
-                          Decided
-                        </span>
-                      )}
-                      <ChevronRight className="h-5 w-5 text-gray-500" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
+                  )}
+                </div>
+              )
             )}
           </div>
         </div>
