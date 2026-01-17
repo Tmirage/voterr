@@ -1,12 +1,6 @@
-export function isMovieNightArchived(date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const nightDate = new Date(`${date}T00:00:00`);
-  return nightDate < today;
-}
-
-export function getTodayDate() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
+export function isMovieNightArchived(date, time = '20:00') {
+  const now = new Date();
+  const nightDateTime = new Date(`${date}T${time}:00`);
+  const archivedAfter = new Date(nightDateTime.getTime() + 2 * 60 * 60 * 1000);
+  return now >= archivedAfter;
 }

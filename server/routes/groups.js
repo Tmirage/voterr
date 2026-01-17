@@ -26,7 +26,7 @@ router.get('/', requireNonGuest, (req, res) => {
       ORDER BY date ASC
     `).all(g.id);
     
-    const upcomingNight = allNights.find(n => !isMovieNightArchived(n.date));
+    const upcomingNight = allNights.find(n => !isMovieNightArchived(n.date, n.time));
 
     return {
       id: g.id,

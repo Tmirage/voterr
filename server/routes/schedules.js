@@ -204,7 +204,7 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     ORDER BY mn.date ASC
   `).all(groupId);
 
-  const nights = allNights.filter(n => !isMovieNightArchived(n.date)).slice(0, 50);
+  const nights = allNights.filter(n => !isMovieNightArchived(n.date, n.time)).slice(0, 50);
 
   res.json(nights.map(n => ({
     id: n.id,
@@ -252,7 +252,7 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
     ORDER BY mn.date DESC
   `).all(groupId);
 
-  const archivedNights = allNights.filter(n => isMovieNightArchived(n.date));
+  const archivedNights = allNights.filter(n => isMovieNightArchived(n.date, n.time));
 
   const nights = archivedNights.slice(offset, offset + limit);
   const totalCount = { count: archivedNights.length };
@@ -322,7 +322,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     WHERE gm.group_id = ?
   `).all(night.group_id);
 
-  const isArchived = isMovieNightArchived(night.date);
+  const isArchived = isMovieNightArchived(night.date, night.time);
 
   res.json({
     id: night.id,
