@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { isMovieNightArchived, getTodayDate } from '../utils/movieNight.js';
+import { isMovieNightArchived } from '../utils/movieNight.js';
 import { requireAuth, requireNonGuest, requireInviteMovieNight } from '../middleware/auth.js';
 
 const router = Router();
