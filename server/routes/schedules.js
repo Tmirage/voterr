@@ -203,10 +203,11 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     ORDER BY mn.date ASC
   `).all(groupId);
 
-  const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const nights = allNights.filter(n => {
-    const nightDateTime = new Date(`${n.date}T${n.time || '23:59'}:00`);
-    return nightDateTime >= now;
+    const nightDate = new Date(`${n.date}T00:00:00`);
+    return nightDate >= today;
   }).slice(0, 50);
 
   res.json(nights.map(n => ({
@@ -255,10 +256,11 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
     ORDER BY mn.date DESC
   `).all(groupId);
 
-  const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const archivedNights = allNights.filter(n => {
-    const nightDateTime = new Date(`${n.date}T${n.time || '23:59'}:00`);
-    return nightDateTime < now;
+    const nightDate = new Date(`${n.date}T00:00:00`);
+    return nightDate < today;
   });
 
   const nights = archivedNights.slice(offset, offset + limit);
@@ -329,9 +331,10 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     WHERE gm.group_id = ?
   `).all(night.group_id);
 
-  const nightDateTime = new Date(`${night.date}T${night.time || '23:59'}:00`);
-  const isPast = nightDateTime < new Date();
-  const isArchived = isPast;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const nightDate = new Date(`${night.date}T00:00:00`);
+  const isArchived = nightDate < today;
 
   res.json({
     id: night.id,
