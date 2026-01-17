@@ -29,9 +29,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5056;
 
+const clientDist = join(process.cwd(), 'client', 'dist');
+
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = join(process.cwd(), 'client', 'dist');
-  app.use(express.static(clientDist));
+  console.log('Serving static files from:', clientDist);
+  app.use(express.static(clientDist, { index: 'index.html' }));
 }
 
 app.use(cors({
@@ -69,7 +71,6 @@ app.get('/api/health', (req, res) => {
 
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
-    const clientDist = join(process.cwd(), 'client', 'dist');
     res.sendFile(join(clientDist, 'index.html'));
   });
 }
