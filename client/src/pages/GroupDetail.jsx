@@ -515,7 +515,8 @@ export default function GroupDetail() {
                             {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
                           </p>
                           <p className="text-sm text-gray-400">
-                            {night.winningMovieTitle ? `Winner: ${night.winningMovieTitle}` : 'No winner decided'}
+                            {night.time}
+                            {night.winningMovieTitle ? ` • Winner: ${night.winningMovieTitle}` : ' • No winner decided'}
                             {night.hostName && ` • Host: ${night.hostName}`}
                           </p>
                         </div>
