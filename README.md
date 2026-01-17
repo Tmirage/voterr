@@ -193,7 +193,7 @@ docker run -d \
   -e RADARR_URL=http://your-radarr:7878 \
   -e RADARR_API_KEY=your-key \
   -e SESSION_SECRET=your-secret \
-  ghcr.io/tmirage/voters:latest
+  ghcr.io/tmirage/voterr:latest
 ```
 
 ### Docker Compose
@@ -201,7 +201,7 @@ docker run -d \
 ```yaml
 services:
   voterr:
-    image: ghcr.io/tmirage/voters:latest
+    image: ghcr.io/tmirage/voterr:latest
     container_name: voterr
     restart: unless-stopped
     ports:

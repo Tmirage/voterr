@@ -32,7 +32,6 @@ const PORT = process.env.PORT || 5056;
 const clientDist = join(process.cwd(), 'client', 'dist');
 
 if (process.env.NODE_ENV === 'production') {
-  console.log('Serving static files from:', clientDist);
   app.use(express.static(clientDist, { index: 'index.html' }));
 }
 
