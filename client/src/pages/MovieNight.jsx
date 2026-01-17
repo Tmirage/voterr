@@ -177,6 +177,7 @@ export default function MovieNight() {
   const nightDateTime = new Date(`${night.date}T${night.time || '20:00'}`);
   const isPast = nightDateTime < new Date();
   
+  const isArchived = isPast || night.status === 'decided';
   const canVote = night.status === 'voting' && !night.isCancelled && !isPast;
   const canNominate = night.status === 'voting' && !night.isCancelled && !isPast;
   const winner = nominations.find(n => n.id === night.winningMovieId);
@@ -206,21 +207,28 @@ export default function MovieNight() {
                 {night.groupName && (
                   <span>{night.groupName}</span>
                 )}
-                {isPast && night.status === 'voting' && (
-                <span className="flex items-center gap-2 text-amber-500">
+                {isPast && (
+                <span className="flex items-center gap-2 text-gray-500">
                   <Lock className="h-4 w-4" />
-                  Locked
+                  Archived
                 </span>
               )}
               {night.hostName ? (
-                <button
-                  onClick={() => setShowHostPicker(true)}
-                  className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
-                >
-                  <Crown className="h-4 w-4 text-purple-400" />
-                  {night.hostName}
-                </button>
-              ) : (
+                isArchived ? (
+                  <span className="flex items-center gap-1">
+                    <Crown className="h-4 w-4 text-purple-400" />
+                    {night.hostName}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setShowHostPicker(true)}
+                    className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
+                  >
+                    <Crown className="h-4 w-4 text-purple-400" />
+                    {night.hostName}
+                  </button>
+                )
+              ) : !isArchived && (
                 <button
                   onClick={() => setShowHostPicker(true)}
                   className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors underline decoration-dotted underline-offset-2"
@@ -235,41 +243,43 @@ export default function MovieNight() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleSetAttendance('attending')}
-              className={clsx(
-                "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                userAttendance?.status === 'attending'
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              )}
-            >
-              <UserCheck className="h-5 w-5" />
-              Attending
-            </button>
-            <button
-              onClick={() => handleSetAttendance('absent')}
-              className={clsx(
-                "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                userAttendance?.status === 'absent'
-                  ? "bg-red-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              )}
-            >
-              <UserX className="h-5 w-5" />
-              Absent
-            </button>
-            {!user.isLocalInvite && (
-              <button
-                onClick={handleCreateInvite}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
-              >
-                <LinkIcon className="h-5 w-5" />
-                Share
-              </button>
+            {!isArchived && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleSetAttendance('attending')}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                    userAttendance?.status === 'attending'
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  )}
+                >
+                  <UserCheck className="h-5 w-5" />
+                  Attending
+                </button>
+                <button
+                  onClick={() => handleSetAttendance('absent')}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                    userAttendance?.status === 'absent'
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  )}
+                >
+                  <UserX className="h-5 w-5" />
+                  Absent
+                </button>
+                {!user.isLocalInvite && (
+                  <button
+                    onClick={handleCreateInvite}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
+                  >
+                    <LinkIcon className="h-5 w-5" />
+                    Share
+                  </button>
+                )}
+              </div>
             )}
-            </div>
           </div>
         </div>
 
@@ -313,7 +323,7 @@ export default function MovieNight() {
               <Trophy className="h-6 w-6 text-yellow-500" />
               <h2 className="text-lg text-white">Winner</h2>
             </div>
-            {(isHost || user.isAdmin) && (
+            {(isHost || user.isAdmin) && !isArchived && (
               <button
                 onClick={handleUndecide}
                 className="text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
@@ -431,14 +441,6 @@ export default function MovieNight() {
 
                     <p className="text-sm text-gray-500 mt-1">
                       Nominated by {nomination.nominatedBy.username}
-                      {nomination.nominatedBy.id === user.id && canNominate && (
-                        <span
-                          onClick={() => handleUnnominate(nomination.id)}
-                          className="ml-2 text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                        >
-                          · Remove
-                        </span>
-                      )}
                     </p>
 
                     {nomination.overview && (
@@ -462,7 +464,7 @@ export default function MovieNight() {
                             <span className="text-gray-300">{w.username}</span>
                           </div>
                         ))}
-                        {nomination.watchedBy.some(w => w.userId === user.id) && canVote && (
+                        {nomination.watchedBy.some(w => w.userId === user.id) && canVote && !isArchived && (
                           nomination.userHasBlocked ? (
                             <button
                               onClick={() => handleUnblockNomination(nomination.id)}
@@ -531,7 +533,7 @@ export default function MovieNight() {
                         </div>
                       )}
 
-                      {(isHost || user.isAdmin) && canNominate && !nomination.isBlocked && (
+                      {(isHost || user.isAdmin) && canNominate && !nomination.isBlocked && !isArchived && (
                         <button
                           onClick={() => handleDecide(nomination.id)}
                           className="h-11 flex items-center gap-2 px-4 bg-yellow-600/20 text-yellow-400 rounded-xl hover:bg-yellow-600/30 transition-colors text-sm active:scale-95"
