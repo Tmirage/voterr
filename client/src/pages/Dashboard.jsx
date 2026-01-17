@@ -21,7 +21,7 @@ import {
   Link as LinkIcon,
   Film
 } from 'lucide-react';
-import { format, parseISO, isPast } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
 import HostPicker from '../components/HostPicker';
 import NominateModal from '../components/NominateModal';
@@ -72,7 +72,7 @@ export default function Dashboard() {
       
       const upcomingNights = nightsPerGroup
         .flat()
-        .filter(n => !n.isCancelled && !isPast(parseISO(n.date)));
+        .filter(n => !n.isCancelled);
 
       const nightsWithDetails = await Promise.all(
         upcomingNights.map(async (night) => {
