@@ -30,6 +30,12 @@ jobs:
           fi
           echo "Version verified: $PKG_VERSION"
 
+      - name: Test build
+        run: |
+          npm ci --omit=dev
+          cd client && npm ci && npm run build
+          echo "Build successful"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
