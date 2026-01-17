@@ -29,6 +29,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5056;
 
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = join(process.cwd(), 'client', 'dist');
+  app.use(express.static(clientDist));
+}
+
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' ? false : true,
   credentials: true
@@ -41,7 +46,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
@@ -63,9 +68,9 @@ app.get('/api/health', (req, res) => {
 });
 
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(join(__dirname, '../client/dist')));
   app.get('*', (req, res) => {
-    res.sendFile(join(__dirname, '../client/dist/index.html'));
+    const clientDist = join(process.cwd(), 'client', 'dist');
+    res.sendFile(join(clientDist, 'index.html'));
   });
 }
 
