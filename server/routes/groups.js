@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
+import { isMovieNightArchived } from '../utils/movieNight.js';
 
 const router = Router();
 
@@ -17,16 +18,15 @@ router.get('/', requireNonGuest, (req, res) => {
     ORDER BY g.name
   `).all(req.session.userId);
 
-  const today = new Date().toISOString().split('T')[0];
-  
   const result = groups.map(g => {
-    const upcomingNight = db.prepare(`
+    const allNights = db.prepare(`
       SELECT id, date, time, status
       FROM movie_nights
-      WHERE group_id = ? AND date >= ? AND is_cancelled = 0
+      WHERE group_id = ? AND is_cancelled = 0
       ORDER BY date ASC
-      LIMIT 1
-    `).get(g.id, today);
+    `).all(g.id);
+    
+    const upcomingNight = allNights.find(n => !isMovieNightArchived(n.date));
 
     return {
       id: g.id,
