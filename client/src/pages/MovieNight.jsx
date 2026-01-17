@@ -431,7 +431,7 @@ export default function MovieNight() {
 
                     <p className="text-sm text-gray-500 mt-1">
                       Nominated by {nomination.nominatedBy.username}
-                      {nomination.nominatedBy.id === user.id && night.status === 'voting' && (
+                      {nomination.nominatedBy.id === user.id && canNominate && (
                         <span
                           onClick={() => handleUnnominate(nomination.id)}
                           className="ml-2 text-red-400 hover:text-red-300 transition-colors cursor-pointer"
