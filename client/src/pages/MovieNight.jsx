@@ -174,12 +174,9 @@ export default function MovieNight() {
   const isHost = night.hostId === user.id;
   const userAttendance = night.attendance?.find(a => a.userId === user.id);
   
-  const nightDateTime = new Date(`${night.date}T${night.time || '20:00'}`);
-  const isPast = nightDateTime < new Date();
-  
-  const isArchived = isPast || night.status === 'decided';
-  const canVote = night.status === 'voting' && !night.isCancelled && !isPast;
-  const canNominate = night.status === 'voting' && !night.isCancelled && !isPast;
+  const isArchived = night.isArchived;
+  const canVote = night.status === 'voting' && !night.isCancelled && !isArchived;
+  const canNominate = night.status === 'voting' && !night.isCancelled && !isArchived;
   const winner = nominations.find(n => n.id === night.winningMovieId);
 
   
@@ -207,7 +204,7 @@ export default function MovieNight() {
                 {night.groupName && (
                   <span>{night.groupName}</span>
                 )}
-                {isPast && (
+                {isArchived && (
                 <span className="flex items-center gap-2 text-gray-500">
                   <Lock className="h-4 w-4" />
                   Archived

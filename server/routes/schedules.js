@@ -324,7 +324,8 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
   `).all(night.group_id);
 
   const nightDateTime = new Date(`${night.date}T${night.time || '23:59'}:00`);
-  const isLocked = nightDateTime < new Date();
+  const isPast = nightDateTime < new Date();
+  const isArchived = isPast;
 
   res.json({
     id: night.id,
@@ -340,7 +341,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     hostName: night.host_name,
     winningMovieId: night.winning_movie_id,
     status: night.status,
-    isLocked,
+    isArchived,
     isCancelled: night.is_cancelled === 1,
     cancelReason: night.cancel_reason,
     attendance: attendance.map(a => ({
