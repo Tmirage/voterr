@@ -66,6 +66,11 @@ router.get('/validate/:token', (req, res) => {
     return res.status(410).json({ error: 'Invite link has expired' });
   }
 
+  const nightDateTime = new Date(`${invite.date}T${invite.time || '23:59'}:00`);
+  if (nightDateTime < new Date()) {
+    return res.status(410).json({ error: 'This movie night has already passed' });
+  }
+
   if (invite.status !== 'voting') {
     return res.status(400).json({ error: 'Voting is closed for this movie night' });
   }
