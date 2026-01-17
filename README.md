@@ -25,8 +25,8 @@ A film voting platform for movie nights that integrates with your Plex ecosystem
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/voterr.git
-cd voterr
+git clone https://github.com/Tmirage/voters.git
+cd voters
 ```
 
 2. Copy the environment file and configure:
@@ -179,16 +179,29 @@ voterr/
 | `RADARR_API_KEY` | Radarr API key | Required |
 | `TZ` | Timezone | `Europe/Amsterdam` |
 
-## Docker Compose with arr stack
+## Docker Installation
 
-Example integration with existing arr stack:
+### Using Pre-built Image (Recommended)
+
+```bash
+docker run -d \
+  --name voterr \
+  -p 5056:5056 \
+  -v ./voterr-data:/app/data \
+  -e PLEX_URL=http://your-plex:32400 \
+  -e PLEX_TOKEN=your-token \
+  -e RADARR_URL=http://your-radarr:7878 \
+  -e RADARR_API_KEY=your-key \
+  -e SESSION_SECRET=your-secret \
+  ghcr.io/tmirage/voters:latest
+```
+
+### Docker Compose
 
 ```yaml
-version: "3.8"
-
 services:
   voterr:
-    image: voterr:latest
+    image: ghcr.io/tmirage/voters:latest
     container_name: voterr
     restart: unless-stopped
     ports:
@@ -203,13 +216,13 @@ services:
       - SESSION_SECRET=${SESSION_SECRET}
     volumes:
       - ./voterr-data:/app/data
-    networks:
-      - arr-network
-
-networks:
-  arr-network:
-    external: true
 ```
+
+### Supported Architectures
+
+The Docker image is built for multiple platforms:
+- `linux/amd64` - Standard x86_64 servers
+- `linux/arm64` - Raspberry Pi 4, Apple Silicon, ARM servers
 
 ## License
 
