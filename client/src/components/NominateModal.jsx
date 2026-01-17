@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Film, Search, X, Check, Grid, List } from 'lucide-react';
+import { Film, Search, X, Check, Grid, List, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import clsx from 'clsx';
 
@@ -18,6 +18,7 @@ export default function NominateModal({
   const [movieSource, setMovieSource] = useState('plex');
   const [overseerrConfigured, setOverseerrConfigured] = useState(false);
   const [tmdbConfigured, setTmdbConfigured] = useState(false);
+  const [tmdbError, setTmdbError] = useState(null);
 
   useEffect(() => {
     loadLibrary();
@@ -33,10 +34,13 @@ export default function NominateModal({
     try {
       const [overseerrStatus, tmdbStatus] = await Promise.all([
         api.get('/movies/overseerr/status').catch(() => ({ configured: false })),
-        api.get('/movies/tmdb/status').catch(() => ({ configured: false }))
+        api.get('/movies/tmdb/status').catch(() => ({ configured: false, valid: false }))
       ]);
       setOverseerrConfigured(overseerrStatus.configured);
-      setTmdbConfigured(tmdbStatus.configured);
+      setTmdbConfigured(tmdbStatus.configured && tmdbStatus.valid);
+      if (tmdbStatus.configured && !tmdbStatus.valid) {
+        setTmdbError(tmdbStatus.error || 'TMDB API key is invalid');
+      }
     } catch (err) {
       console.error('Failed to check external sources:', err);
     }
@@ -150,6 +154,12 @@ export default function NominateModal({
         </div>
 
         <div className="p-4 border-b border-gray-700 space-y-3">
+          {tmdbError && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-400 text-sm">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>TMDB: {tmdbError}</span>
+            </div>
+          )}
           {(overseerrConfigured || tmdbConfigured) && (
             <div className="flex gap-2">
               <button

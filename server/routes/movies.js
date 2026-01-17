@@ -4,7 +4,7 @@ import { requireNonGuestOrInvite } from '../middleware/auth.js';
 import { getPlexServers, getPlexLibraries, getPlexMovies, searchPlexMovies } from '../services/plex.js';
 import { getPlexToken, getSetting } from '../services/settings.js';
 import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig, getOverseerrStatus } from '../services/overseerr.js';
-import { searchMovies as searchTmdbMovies, isTmdbConfigured } from '../services/tmdb.js';
+import { searchMovies as searchTmdbMovies, isTmdbConfigured, validateTmdbApiKey } from '../services/tmdb.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
 
 const router = Router();
@@ -138,8 +138,9 @@ router.get('/overseerr/status', requireNonGuestOrInvite, async (req, res) => {
   res.json({ configured: config.configured });
 });
 
-router.get('/tmdb/status', requireNonGuestOrInvite, (req, res) => {
-  res.json({ configured: isTmdbConfigured() });
+router.get('/tmdb/status', requireNonGuestOrInvite, async (req, res) => {
+  const status = await validateTmdbApiKey();
+  res.json(status);
 });
 
 router.get('/:ratingKey', requireNonGuestOrInvite, async (req, res) => {

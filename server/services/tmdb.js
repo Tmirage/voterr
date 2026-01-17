@@ -12,6 +12,23 @@ export function isTmdbConfigured() {
   return !!getApiKey();
 }
 
+export async function validateTmdbApiKey() {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return { configured: false, valid: false, error: null };
+  }
+
+  try {
+    const response = await fetch(`${TMDB_BASE_URL}/configuration?api_key=${apiKey}`);
+    if (!response.ok) {
+      return { configured: true, valid: false, error: 'Invalid API key' };
+    }
+    return { configured: true, valid: true, error: null };
+  } catch (error) {
+    return { configured: true, valid: false, error: 'Failed to connect to TMDB' };
+  }
+}
+
 export async function searchMovies(query) {
   const apiKey = getApiKey();
   if (!apiKey) {
