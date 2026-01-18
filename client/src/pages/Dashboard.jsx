@@ -358,7 +358,7 @@ export default function Dashboard() {
                         <Trophy className="h-5 w-5 text-yellow-500" />
                         <span className="text-sm text-yellow-400">Winner</span>
                       </div>
-                      {(night.hostId === user.id || user.isAdmin) && (
+                      {night.canManage && (
                         <button
                           onClick={() => handleUndecide(night.id)}
                           className="text-xs text-gray-400 hover:text-white px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
@@ -529,7 +529,7 @@ export default function Dashboard() {
                                     +
                                   </button>
                                 </div>
-                                {canNominate && (night.hostId === user.id || user.isAdmin) && nomination.id !== night.winningMovieId && (
+                                {canNominate && night.canManage && nomination.id !== night.winningMovieId && (
                                   <Tooltip content="Pick as winner">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDecide(night.id, nomination.id); }}

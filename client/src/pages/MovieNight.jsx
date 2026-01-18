@@ -19,7 +19,9 @@ import {
   Users,
   Crown,
   Lock,
-  Film
+  Film,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
@@ -126,6 +128,24 @@ export default function MovieNight() {
     }
   }
 
+  async function handleCancel() {
+    try {
+      await api.patch(`/schedules/movie-nights/${id}`, { isCancelled: true });
+      await loadMovieNight();
+    } catch (error) {
+      console.error('Failed to cancel:', error);
+    }
+  }
+
+  async function handleUncancel() {
+    try {
+      await api.patch(`/schedules/movie-nights/${id}`, { isCancelled: false });
+      await loadMovieNight();
+    } catch (error) {
+      console.error('Failed to uncancel:', error);
+    }
+  }
+
   async function handleDecide(nominationId = null) {
     try {
       await api.post(`/votes/movie-night/${id}/decide`, { nominationId });
@@ -171,12 +191,12 @@ export default function MovieNight() {
     );
   }
 
-  const isHost = night.hostId === user.id;
   const userAttendance = night.attendance?.find(a => a.userId === user.id);
   
   const isArchived = night.isArchived;
-  const canVote = night.status === 'voting' && !night.isCancelled && !isArchived;
-  const canNominate = night.status === 'voting' && !night.isCancelled && !isArchived;
+  const isLocked = isArchived || night.isCancelled;
+  const canVote = night.status === 'voting' && !isLocked;
+  const canNominate = night.status === 'voting' && !isLocked;
   const winner = nominations.find(n => n.id === night.winningMovieId);
 
   
@@ -204,14 +224,20 @@ export default function MovieNight() {
                 {night.groupName && (
                   <span>{night.groupName}</span>
                 )}
-                {isArchived && (
+                {night.isCancelled && (
+                <span className="flex items-center gap-2 text-red-400">
+                  <XCircle className="h-4 w-4" />
+                  Cancelled
+                </span>
+              )}
+                {isArchived && !night.isCancelled && (
                 <span className="flex items-center gap-2 text-gray-500">
                   <Lock className="h-4 w-4" />
                   Archived
                 </span>
               )}
               {night.hostName ? (
-                isArchived ? (
+                isLocked ? (
                   <span className="flex items-center gap-1">
                     <Crown className="h-4 w-4 text-purple-400" />
                     {night.hostName}
@@ -225,7 +251,7 @@ export default function MovieNight() {
                     {night.hostName}
                   </button>
                 )
-              ) : !isArchived && (
+              ) : !isLocked && (
                 <button
                   onClick={() => setShowHostPicker(true)}
                   className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors underline decoration-dotted underline-offset-2"
@@ -240,7 +266,7 @@ export default function MovieNight() {
               )}
             </div>
 
-            {!isArchived && (
+            {!isLocked && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => handleSetAttendance('attending')}
@@ -274,6 +300,25 @@ export default function MovieNight() {
                     <LinkIcon className="h-5 w-5" />
                     Share
                   </button>
+                )}
+                {night.canManage && !isArchived && (
+                  night.isCancelled ? (
+                    <button
+                      onClick={handleUncancel}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors active:scale-95"
+                    >
+                      <RotateCcw className="h-5 w-5" />
+                      Restore
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCancel}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors active:scale-95"
+                    >
+                      <XCircle className="h-5 w-5" />
+                      Cancel
+                    </button>
+                  )
                 )}
               </div>
             )}
@@ -320,7 +365,7 @@ export default function MovieNight() {
               <Trophy className="h-6 w-6 text-yellow-500" />
               <h2 className="text-lg text-white">Winner</h2>
             </div>
-            {(isHost || user.isAdmin) && !isArchived && (
+            {night.canManage && !isLocked && (
               <button
                 onClick={handleUndecide}
                 className="text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
@@ -461,7 +506,7 @@ export default function MovieNight() {
                             <span className="text-gray-300">{w.username}</span>
                           </div>
                         ))}
-                        {nomination.watchedBy.some(w => w.userId === user.id) && canVote && !isArchived && (
+                        {nomination.watchedBy.some(w => w.userId === user.id) && canVote && (
                           nomination.userHasBlocked ? (
                             <button
                               onClick={() => handleUnblockNomination(nomination.id)}
@@ -530,7 +575,7 @@ export default function MovieNight() {
                         </div>
                       )}
 
-                      {(isHost || user.isAdmin) && canNominate && !nomination.isBlocked && !isArchived && (
+                      {night.canManage && canNominate && !nomination.isBlocked && (
                         <button
                           onClick={() => handleDecide(nomination.id)}
                           className="h-11 flex items-center gap-2 px-4 bg-yellow-600/20 text-yellow-400 rounded-xl hover:bg-yellow-600/30 transition-colors text-sm active:scale-95"

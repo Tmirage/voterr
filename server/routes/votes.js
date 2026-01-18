@@ -3,13 +3,9 @@ import db from '../db/index.js';
 import { requireAuth, requireNonGuest, requireNonGuestOrInvite, requireInviteMovieNight } from '../middleware/auth.js';
 import { hasUserWatchedMovie, getTautulliStatus } from '../services/tautulli.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
+import { isMovieNightLocked } from '../utils/movieNight.js';
 
 const router = Router();
-
-function isMovieNightPast(date, time) {
-  const nightDateTime = new Date(`${date}T${time || '23:59'}:00`);
-  return nightDateTime < new Date();
-}
 
 router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, res) => {
   const { movieNightId } = req.params;
@@ -194,8 +190,8 @@ router.post('/nominate', requireNonGuestOrInvite, async (req, res) => {
     return res.status(400).json({ error: 'Voting is closed for this movie night' });
   }
 
-  if (isMovieNightPast(night.date, night.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  if (isMovieNightLocked(night)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   const isMember = db.prepare(
@@ -259,9 +255,9 @@ router.delete('/nominations/:id', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'Cannot remove nominations after voting is closed' });
   }
 
-  const night = db.prepare('SELECT date, time FROM movie_nights WHERE id = ?').get(nomination.movie_night_id);
-  if (night && isMovieNightPast(night.date, night.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  const night = db.prepare('SELECT * FROM movie_nights WHERE id = ?').get(nomination.movie_night_id);
+  if (night && isMovieNightLocked(night)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   const isNominator = nomination.nominated_by === req.session.userId;
@@ -310,9 +306,9 @@ router.post('/vote', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Voting is closed for this movie night' });
   }
 
-  const night = db.prepare('SELECT date, time FROM movie_nights WHERE id = ?').get(nomination.movie_night_id);
-  if (night && isMovieNightPast(night.date, night.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  const night = db.prepare('SELECT * FROM movie_nights WHERE id = ?').get(nomination.movie_night_id);
+  if (night && isMovieNightLocked(night)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   const isMember = db.prepare(
@@ -376,7 +372,7 @@ router.delete('/vote/:nominationId', requireAuth, (req, res) => {
   const { nominationId } = req.params;
 
   const nomination = db.prepare(`
-    SELECT n.*, mn.status, mn.date, mn.time
+    SELECT n.*, mn.status, mn.date, mn.time, mn.is_cancelled
     FROM nominations n
     JOIN movie_nights mn ON n.movie_night_id = mn.id
     WHERE n.id = ?
@@ -390,8 +386,8 @@ router.delete('/vote/:nominationId', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Voting is closed for this movie night' });
   }
 
-  if (isMovieNightPast(nomination.date, nomination.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  if (isMovieNightLocked(nomination)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   const currentVote = db.prepare(
@@ -417,7 +413,7 @@ router.post('/nomination/:nominationId/block', requireNonGuest, async (req, res)
   const { nominationId } = req.params;
 
   const nomination = db.prepare(`
-    SELECT n.*, mn.group_id, mn.status, mn.date, mn.time
+    SELECT n.*, mn.group_id, mn.status, mn.date, mn.time, mn.is_cancelled
     FROM nominations n
     JOIN movie_nights mn ON n.movie_night_id = mn.id
     WHERE n.id = ?
@@ -431,8 +427,8 @@ router.post('/nomination/:nominationId/block', requireNonGuest, async (req, res)
     return res.status(400).json({ error: 'Voting is closed' });
   }
 
-  if (isMovieNightPast(nomination.date, nomination.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  if (isMovieNightLocked(nomination)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   const user = db.prepare('SELECT plex_id FROM users WHERE id = ?').get(req.session.userId);
@@ -459,14 +455,14 @@ router.delete('/nomination/:nominationId/block', requireNonGuest, (req, res) => 
   const { nominationId } = req.params;
 
   const nomination = db.prepare(`
-    SELECT mn.date, mn.time
+    SELECT mn.date, mn.time, mn.is_cancelled
     FROM nominations n
     JOIN movie_nights mn ON n.movie_night_id = mn.id
     WHERE n.id = ?
   `).get(nominationId);
 
-  if (nomination && isMovieNightPast(nomination.date, nomination.time)) {
-    return res.status(400).json({ error: 'This movie night has already passed' });
+  if (nomination && isMovieNightLocked(nomination)) {
+    return res.status(400).json({ error: 'This movie night is locked' });
   }
 
   db.prepare('DELETE FROM nomination_blocks WHERE nomination_id = ? AND user_id = ?')

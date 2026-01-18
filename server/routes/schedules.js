@@ -316,13 +316,19 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
   `).all(id);
 
   const members = db.prepare(`
-    SELECT u.id, u.username, u.avatar_url
+    SELECT u.id, u.username, u.avatar_url, gm.role
     FROM group_members gm
     JOIN users u ON gm.user_id = u.id
     WHERE gm.group_id = ?
   `).all(night.group_id);
 
   const isArchived = isMovieNightArchived(night.date, night.time);
+  
+  const currentUserMembership = members.find(m => m.id === req.session.userId);
+  const isHost = night.host_id === req.session.userId;
+  const isGroupAdmin = currentUserMembership?.role === 'admin';
+  const isAppAdmin = req.session.isAdmin === true;
+  const canManage = isHost || isGroupAdmin || isAppAdmin;
 
   res.json({
     id: night.id,
@@ -341,6 +347,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     isArchived,
     isCancelled: night.is_cancelled === 1,
     cancelReason: night.cancel_reason,
+    canManage,
     attendance: attendance.map(a => ({
       userId: a.user_id,
       username: a.username,
@@ -364,19 +371,27 @@ router.patch('/movie-nights/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
+  const membership = db.prepare(
+    'SELECT role FROM group_members WHERE group_id = ? AND user_id = ?'
   ).get(night.group_id, req.session.userId);
 
-  if (!isMember) {
+  if (!membership) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
+
+  const isHost = night.host_id === req.session.userId;
+  const isGroupAdmin = membership.role === 'admin';
+  const isAppAdmin = req.session.isAdmin === true;
+  const canManage = isHost || isGroupAdmin || isAppAdmin;
 
   if (hostId !== undefined) {
     db.prepare('UPDATE movie_nights SET host_id = ? WHERE id = ?').run(hostId, id);
   }
 
   if (isCancelled !== undefined) {
+    if (!canManage) {
+      return res.status(403).json({ error: 'Only host, group admin, or app admin can cancel/uncancel' });
+    }
     db.prepare(`
       UPDATE movie_nights SET is_cancelled = ?, cancel_reason = ? WHERE id = ?
     `).run(isCancelled ? 1 : 0, cancelReason || null, id);
