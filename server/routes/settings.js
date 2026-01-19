@@ -1,13 +1,14 @@
 import { Router } from 'express';
-import { requireNonGuest } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { getSetting, setSettings } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
 import { retryTautulli } from '../services/tautulli.js';
 import { retryOverseerr } from '../services/overseerr.js';
+import { clearPlexCache } from './movies.js';
 
 const router = Router();
 
-router.get('/', requireNonGuest, (req, res) => {
+router.get('/', requireAdmin, (req, res) => {
   res.json({
     overseerrUrl: getSetting('overseerr_url') || '',
     overseerrApiKey: getSetting('overseerr_api_key') || '',
@@ -18,7 +19,7 @@ router.get('/', requireNonGuest, (req, res) => {
   });
 });
 
-router.post('/', requireNonGuest, (req, res) => {
+router.post('/', requireAdmin, (req, res) => {
   const { overseerrUrl, overseerrApiKey, tautulliUrl, tautulliApiKey, tmdbApiKey, cachePlexImages } = req.body;
 
   const settings = {};
@@ -33,7 +34,7 @@ router.post('/', requireNonGuest, (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/test/overseerr', requireNonGuest, async (req, res) => {
+router.post('/test/overseerr', requireAdmin, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
@@ -56,7 +57,7 @@ router.post('/test/overseerr', requireNonGuest, async (req, res) => {
   }
 });
 
-router.post('/test/tautulli', requireNonGuest, async (req, res) => {
+router.post('/test/tautulli', requireAdmin, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
@@ -76,16 +77,16 @@ router.post('/test/tautulli', requireNonGuest, async (req, res) => {
   }
 });
 
-router.get('/cache/stats', requireNonGuest, (req, res) => {
+router.get('/cache/stats', requireAdmin, (req, res) => {
   res.json(getCacheStats());
 });
 
-router.delete('/cache/clear', requireNonGuest, (req, res) => {
+router.delete('/cache/clear', requireAdmin, (req, res) => {
   const deleted = clearCache();
   res.json({ deleted });
 });
 
-router.post('/test/tmdb', requireNonGuest, async (req, res) => {
+router.post('/test/tmdb', requireAdmin, async (req, res) => {
   const { apiKey } = req.body;
 
   if (!apiKey) {
@@ -105,13 +106,18 @@ router.post('/test/tmdb', requireNonGuest, async (req, res) => {
   }
 });
 
-router.post('/retry/tautulli', requireNonGuest, (req, res) => {
+router.post('/retry/tautulli', requireAdmin, (req, res) => {
   retryTautulli();
   res.json({ success: true });
 });
 
-router.post('/retry/overseerr', requireNonGuest, (req, res) => {
+router.post('/retry/overseerr', requireAdmin, (req, res) => {
   retryOverseerr();
+  res.json({ success: true });
+});
+
+router.post('/plex/clear-cache', requireAdmin, (req, res) => {
+  clearPlexCache();
   res.json({ success: true });
 });
 

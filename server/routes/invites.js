@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
+import { isGroupMember, isGroupAdmin } from '../utils/group.js';
 
 const router = Router();
 
@@ -18,11 +19,7 @@ router.post('/create', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(night.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -51,7 +48,7 @@ router.get('/validate/:token', (req, res) => {
   const { token } = req.params;
 
   const invite = db.prepare(`
-    SELECT gi.*, mn.date, mn.time, mn.status, g.name as group_name, g.description as group_description, g.image_url as group_image_url, g.max_votes_per_user
+    SELECT gi.*, mn.date, mn.time, mn.status, mn.is_cancelled, mn.cancel_reason, g.name as group_name, g.description as group_description, g.image_url as group_image_url, g.max_votes_per_user
     FROM guest_invites gi
     JOIN movie_nights mn ON gi.movie_night_id = mn.id
     JOIN groups g ON mn.group_id = g.id
@@ -79,7 +76,7 @@ router.get('/validate/:token', (req, res) => {
     SELECT id, username, avatar_url FROM users WHERE is_local = 1
   `).all();
 
-  const maxVotes = invite.max_votes_per_user || 3;
+  const maxVotes = invite.max_votes_per_user;
   const localUsersWithVotes = localUsers.map(u => {
     const userTotalVotes = db.prepare(`
       SELECT COALESCE(SUM(v.vote_count), 0) as total
@@ -116,6 +113,8 @@ router.get('/validate/:token', (req, res) => {
     groupDescription: invite.group_description,
     groupImageUrl: invite.group_image_url,
     maxVotesPerUser: maxVotes,
+    isCancelled: invite.is_cancelled === 1,
+    cancelReason: invite.cancel_reason,
     localUsers: localUsersWithVotes,
     topNominations: topNominations.map(n => ({
       id: n.id,
@@ -154,11 +153,7 @@ router.post('/local-join', (req, res) => {
     return res.status(404).json({ error: 'Local user not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(invite.group_id, userId);
-
-  if (!isMember) {
+  if (!isGroupMember(invite.group_id, userId)) {
     db.prepare(`
       INSERT OR IGNORE INTO group_members (group_id, user_id, role)
       VALUES (?, ?, 'member')
@@ -205,11 +200,7 @@ router.post('/plex-join', requireAuth, (req, res) => {
     return res.status(410).json({ error: 'Invite link has expired' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(invite.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(invite.group_id, req.session.userId)) {
     db.prepare(`
       INSERT OR IGNORE INTO group_members (group_id, user_id, role)
       VALUES (?, ?, 'member')
@@ -230,11 +221,7 @@ router.get('/movie-night/:movieNightId', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(night.group_id, req.session.userId);
-
-  if (!isAdmin) {
+  if (!isGroupAdmin(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Only admins can view invites' });
   }
 
@@ -270,13 +257,9 @@ router.delete('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Invite not found' });
   }
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(invite.group_id, req.session.userId);
-
   const isCreator = invite.created_by === req.session.userId;
 
-  if (!isAdmin && !isCreator) {
+  if (!isGroupAdmin(invite.group_id, req.session.userId) && !isCreator) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 

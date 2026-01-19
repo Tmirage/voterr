@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest, requireNonGuestOrInvite, requireInviteMovieNight } from '../middleware/auth.js';
-import { hasUserWatchedMovie, getTautulliStatus } from '../services/tautulli.js';
-import { getProxiedImageUrl } from '../services/imageCache.js';
 import { isMovieNightLocked } from '../utils/movieNight.js';
+import { isGroupMember, isGroupAdmin } from '../utils/group.js';
+import { getAttendance } from '../utils/attendance.js';
+import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../utils/nominations.js';
+import { getTautulliWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
 
 const router = Router();
 
@@ -15,16 +17,12 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(night.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
   const group = db.prepare('SELECT max_votes_per_user FROM groups WHERE id = ?').get(night.group_id);
-  const maxVotes = group?.max_votes_per_user || 3;
+  const maxVotes = group?.max_votes_per_user;
 
   const nominations = db.prepare(`
     SELECT n.*, u.username as nominated_by_name
@@ -34,19 +32,7 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     ORDER BY n.created_at
   `).all(movieNightId);
 
-  const attendingUserIds = new Set(
-    db.prepare(`
-      SELECT user_id FROM attendance 
-      WHERE movie_night_id = ? AND status = 'attending'
-    `).all(movieNightId).map(a => a.user_id)
-  );
-
-  const absentUserIds = new Set(
-    db.prepare(`
-      SELECT user_id FROM attendance 
-      WHERE movie_night_id = ? AND status = 'absent'
-    `).all(movieNightId).map(a => a.user_id)
-  );
+  const { attending: attendingUserIds, absent: absentUserIds } = getAttendance(movieNightId);
 
   const userTotalVotes = db.prepare(`
     SELECT COALESCE(SUM(v.vote_count), 0) as total
@@ -62,108 +48,42 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     WHERE gm.group_id = ?
   `).all(night.group_id);
 
-  const watchedCache = new Map();
-  const watchCheckPromises = [];
-  
-  for (const n of nominations) {
-    for (const member of groupMembers) {
-      if (member.plex_id && n.plex_rating_key) {
-        const key = `${member.plex_id}-${n.plex_rating_key}`;
-        if (!watchedCache.has(key)) {
-          watchedCache.set(key, null);
-          watchCheckPromises.push(
-            hasUserWatchedMovie(member.plex_id, n.plex_rating_key, n.title)
-              .then(watched => watchedCache.set(key, watched))
-              .catch(() => watchedCache.set(key, false))
-          );
-        }
-      }
-    }
-  }
-  
-  await Promise.all(watchCheckPromises);
+  const watchedCache = await buildWatchedCache(nominations, groupMembers);
 
-  const nominationsWithVotes = nominations.map((n) => {
-    const allVotes = db.prepare(`
-      SELECT v.*, u.username, u.avatar_url
-      FROM votes v
-      JOIN users u ON v.user_id = u.id
-      WHERE v.nomination_id = ?
-    `).all(n.id);
-
-    const votes = allVotes.filter(v => !absentUserIds.has(v.user_id) && (attendingUserIds.size === 0 || attendingUserIds.has(v.user_id)));
-    const userVote = allVotes.find(v => v.user_id === req.session.userId);
-
-    const watchedBy = [];
-    for (const member of groupMembers) {
-      if (member.plex_id && n.plex_rating_key) {
-        const key = `${member.plex_id}-${n.plex_rating_key}`;
-        if (watchedCache.get(key)) {
-          watchedBy.push({ userId: member.id, username: member.username, avatarUrl: member.avatar_url });
-        }
-      }
-    }
-
-    const blocks = db.prepare(`
-      SELECT nb.*, u.username, u.avatar_url
-      FROM nomination_blocks nb
-      JOIN users u ON nb.user_id = u.id
-      WHERE nb.nomination_id = ?
-    `).all(n.id);
-
-    const userHasBlocked = blocks.some(b => b.user_id === req.session.userId);
-
-    return {
-      id: n.id,
-      ratingKey: n.plex_rating_key,
-      tmdbId: n.tmdb_id,
-      mediaType: n.media_type || 'plex',
-      title: n.title,
-      year: n.year,
-      posterUrl: n.poster_url ? getProxiedImageUrl(n.poster_url) : null,
-      overview: n.overview,
-      runtime: n.runtime,
-      nominatedBy: {
-        id: n.nominated_by,
-        username: n.nominated_by_name
-      },
-      createdAt: n.created_at,
-      votes: votes.map(v => ({
-        userId: v.user_id,
-        username: v.username,
-        avatarUrl: v.avatar_url,
-        voteCount: v.vote_count || 1
-      })),
-      voteCount: votes.reduce((sum, v) => sum + (v.vote_count || 1), 0),
-      watchedBy,
-      blockedBy: blocks.map(b => ({ userId: b.user_id, username: b.username, avatarUrl: b.avatar_url })),
-      isBlocked: blocks.length > 0,
-      userHasBlocked,
-      userHasVoted: !!userVote,
-      userVoteCount: userVote?.vote_count || 0
-    };
+  const nominationsWithVotes = enrichNominations(nominations, {
+    userId: req.session.userId,
+    groupMembers,
+    watchedCache,
+    attendingUserIds,
+    absentUserIds
   });
 
-  const _serviceWarnings = [];
-  const tautulliStatus = getTautulliStatus();
-  if (tautulliStatus.configured && tautulliStatus.failed) {
-    const msg = tautulliStatus.circuitOpen 
-      ? `Tautulli disabled for ${tautulliStatus.remainingMinutes} min (${tautulliStatus.error})`
-      : `Tautulli unavailable: ${tautulliStatus.error}`;
-    _serviceWarnings.push({
-      message: msg,
-      type: 'warning',
-      service: 'tautulli',
-      circuitOpen: tautulliStatus.circuitOpen,
-      remainingMinutes: tautulliStatus.remainingMinutes
-    });
-  }
+  const _serviceWarnings = collectServiceWarnings(getTautulliWarning);
+
+  const isLocked = isMovieNightLocked(night);
+  const canVote = night.status === 'voting' && !isLocked;
+  const canNominate = night.status === 'voting' && !isLocked;
+
+  const nominationsWithLeader = sortAndMarkLeader(nominationsWithVotes, night.winning_movie_id);
+
+  const winner = night.winning_movie_id 
+    ? nominationsWithVotes.find(n => n.id === night.winning_movie_id) || null
+    : null;
+
+  const attendingCount = attendingUserIds.size;
+  const absentCount = absentUserIds.size;
 
   res.json({
-    nominations: nominationsWithVotes,
+    nominations: nominationsWithLeader,
     userRemainingVotes: maxVotes - (userTotalVotes?.total || 0),
     maxVotesPerUser: maxVotes,
-    ...(_serviceWarnings.length > 0 && { _serviceWarnings })
+    isLocked,
+    canVote,
+    canNominate,
+    winner,
+    attendingCount,
+    absentCount,
+    ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
   });
 });
 
@@ -194,11 +114,7 @@ router.post('/nominate', requireNonGuestOrInvite, async (req, res) => {
     return res.status(400).json({ error: 'This movie night is locked' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(night.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -261,11 +177,8 @@ router.delete('/nominations/:id', requireNonGuest, (req, res) => {
   }
 
   const isNominator = nomination.nominated_by === req.session.userId;
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(nomination.group_id, req.session.userId);
 
-  if (!isAdmin && !isNominator) {
+  if (!isGroupAdmin(nomination.group_id, req.session.userId) && !isNominator) {
     return res.status(403).json({ error: 'Only the nominator or an admin can remove this nomination' });
   }
 
@@ -311,16 +224,12 @@ router.post('/vote', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'This movie night is locked' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(nomination.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(nomination.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
   const group = db.prepare('SELECT max_votes_per_user FROM groups WHERE id = ?').get(nomination.group_id);
-  const maxVotes = group?.max_votes_per_user || 3;
+  const maxVotes = group?.max_votes_per_user;
 
   const userTotalVotes = db.prepare(`
     SELECT COALESCE(SUM(v.vote_count), 0) as total
@@ -481,11 +390,8 @@ router.post('/movie-night/:id/decide', requireNonGuest, (req, res) => {
   }
 
   const isHost = night.host_id === req.session.userId;
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(night.group_id, req.session.userId);
 
-  if (!isHost && !isAdmin) {
+  if (!isHost && !isGroupAdmin(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Only the host or admin can decide the winner' });
   }
 
@@ -506,10 +412,8 @@ router.post('/movie-night/:id/decide', requireNonGuest, (req, res) => {
       UPDATE movie_nights SET winning_movie_id = ?, status = 'decided' WHERE id = ?
     `).run(nominationId, id);
   } else {
-    const attendingUserIds = db.prepare(`
-      SELECT user_id FROM attendance 
-      WHERE movie_night_id = ? AND status = 'attending'
-    `).all(id).map(a => a.user_id);
+    const { attending } = getAttendance(id);
+    const attendingUserIds = [...attending];
 
     let winner;
     if (attendingUserIds.length > 0) {
@@ -553,11 +457,8 @@ router.post('/movie-night/:id/undecide', requireNonGuest, (req, res) => {
   }
 
   const isHost = night.host_id === req.session.userId;
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(night.group_id, req.session.userId);
 
-  if (!isHost && !isAdmin) {
+  if (!isHost && !isGroupAdmin(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Only the host or admin can undo the winner' });
   }
 

@@ -89,16 +89,13 @@ export default function Setup() {
     setTesting(t => ({ ...t, overseerr: true }));
     setTestResult(r => ({ ...r, overseerr: null }));
     try {
-      const response = await fetch(`${config.overseerrUrl}/api/v1/status`, {
-        headers: { 'X-Api-Key': config.overseerrApiKey }
+      const result = await api.post('/settings/test/overseerr', {
+        url: config.overseerrUrl,
+        apiKey: config.overseerrApiKey
       });
-      if (response.ok) {
-        setTestResult(r => ({ ...r, overseerr: { success: true } }));
-      } else {
-        setTestResult(r => ({ ...r, overseerr: { success: false, message: 'Invalid URL or API key' } }));
-      }
+      setTestResult(r => ({ ...r, overseerr: { success: true } }));
     } catch (e) {
-      setTestResult(r => ({ ...r, overseerr: { success: false, message: 'Connection failed' } }));
+      setTestResult(r => ({ ...r, overseerr: { success: false, message: e.message || 'Connection failed' } }));
     } finally {
       setTesting(t => ({ ...t, overseerr: false }));
     }
@@ -109,14 +106,13 @@ export default function Setup() {
     setTesting(t => ({ ...t, tautulli: true }));
     setTestResult(r => ({ ...r, tautulli: null }));
     try {
-      const response = await fetch(`${config.tautulliUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=arnold`);
-      if (response.ok) {
-        setTestResult(r => ({ ...r, tautulli: { success: true } }));
-      } else {
-        setTestResult(r => ({ ...r, tautulli: { success: false, message: 'Invalid URL or API key' } }));
-      }
+      const result = await api.post('/settings/test/tautulli', {
+        url: config.tautulliUrl,
+        apiKey: config.tautulliApiKey
+      });
+      setTestResult(r => ({ ...r, tautulli: { success: true } }));
     } catch (e) {
-      setTestResult(r => ({ ...r, tautulli: { success: false, message: 'Connection failed' } }));
+      setTestResult(r => ({ ...r, tautulli: { success: false, message: e.message || 'Connection failed' } }));
     } finally {
       setTesting(t => ({ ...t, tautulli: false }));
     }

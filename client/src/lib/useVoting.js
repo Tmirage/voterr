@@ -2,79 +2,118 @@ import { useState, useRef, useCallback } from 'react';
 import { api } from './api';
 import { useNotifications } from '../context/NotificationContext';
 
+function sortByVotes(noms, winnerId = null) {
+  return [...noms].sort((a, b) => {
+    if (winnerId === a.id) return -1;
+    if (winnerId === b.id) return 1;
+    return b.voteCount - a.voteCount;
+  });
+}
+
+function useVotingCore({ showRankingCountdown, clearRankingCountdown, addNotification, showVotesCast }) {
+  const pendingRef = useRef(false);
+  const latestDataRef = useRef([]);
+  const sortedRef = useRef([]);
+
+  const applyNewOrder = useCallback((winnerId = null) => {
+    const sorted = sortByVotes(latestDataRef.current, winnerId);
+    sortedRef.current = sorted;
+    pendingRef.current = false;
+    return sorted;
+  }, []);
+
+  const processRefreshData = useCallback((newNominations, currentSorted, winnerId, onUpdate) => {
+    const newSorted = sortByVotes(newNominations, winnerId);
+    latestDataRef.current = newNominations;
+    
+    const currentOrder = currentSorted.map(n => n.id);
+    const newOrder = newSorted.map(n => n.id);
+    const orderChanged = currentOrder.length > 0 && currentOrder.some((id, i) => id !== newOrder[i]);
+    
+    const updatedInCurrentOrder = currentOrder.map(id => newNominations.find(n => n.id === id)).filter(Boolean);
+    const newState = updatedInCurrentOrder.length ? updatedInCurrentOrder : newSorted;
+    sortedRef.current = newState;
+    
+    if (orderChanged) {
+      pendingRef.current = true;
+      setTimeout(() => {
+        showRankingCountdown(5, () => {
+          const sorted = applyNewOrder(winnerId);
+          onUpdate(sorted);
+        });
+      }, 0);
+      return { sorted: newState, orderChanged: true };
+    }
+    
+    if (!pendingRef.current) {
+      sortedRef.current = newSorted;
+      return { sorted: newSorted, orderChanged: false };
+    }
+    
+    return { sorted: newState, orderChanged: false };
+  }, [showRankingCountdown, applyNewOrder]);
+
+  const optimisticVote = useCallback((nominations, nominationId, increment) => {
+    const updated = nominations.map(nom => 
+      nom.id === nominationId 
+        ? { ...nom, voteCount: increment ? nom.voteCount + 1 : Math.max(0, nom.voteCount - 1) } 
+        : nom
+    );
+    sortedRef.current = updated;
+    return updated;
+  }, []);
+
+  const cancelRerank = useCallback(() => {
+    clearRankingCountdown();
+    pendingRef.current = false;
+  }, [clearRankingCountdown]);
+
+  return {
+    pendingRef,
+    sortedRef,
+    processRefreshData,
+    optimisticVote,
+    cancelRerank,
+    addNotification,
+    showVotesCast
+  };
+}
+
 export function useVoting(nightId, winningMovieId = null) {
-  const { showRankingCountdown, clearRankingCountdown, addNotification, showVotesCast } = useNotifications();
+  const notifications = useNotifications();
+  const core = useVotingCore(notifications);
   
   const [sortedNominations, setSortedNominations] = useState([]);
   const [userRemainingVotes, setUserRemainingVotes] = useState(0);
-  const [maxVotesPerUser, setMaxVotesPerUser] = useState(3);
+  const [maxVotesPerUser, setMaxVotesPerUser] = useState(0);
   
-  const pendingRef = useRef(false);
-  const latestDataRef = useRef([]);
   const winnerRef = useRef(winningMovieId);
-  const sortedRef = useRef([]);
-
-  const sortByVotes = useCallback((noms, winnerId = winnerRef.current) => {
-    return [...noms].sort((a, b) => {
-      if (winnerId === a.id) return -1;
-      if (winnerId === b.id) return 1;
-      return b.voteCount - a.voteCount;
-    });
-  }, []);
-
-  const applyNewOrder = useCallback(() => {
-    const sorted = sortByVotes(latestDataRef.current);
-    sortedRef.current = sorted;
-    setSortedNominations(sorted);
-    pendingRef.current = false;
-  }, [sortByVotes]);
 
   const refresh = useCallback(async () => {
     try {
       const votesData = await api.get(`/votes/movie-night/${nightId}`);
-      const newNominations = votesData.nominations;
-      const newSorted = sortByVotes(newNominations);
+      const { sorted } = core.processRefreshData(
+        votesData.nominations, 
+        core.sortedRef.current, 
+        winnerRef.current,
+        setSortedNominations
+      );
       
-      latestDataRef.current = newNominations;
       setUserRemainingVotes(votesData.userRemainingVotes);
-      setMaxVotesPerUser(votesData.maxVotesPerUser || 3);
-      
-      const currentOrder = sortedRef.current.map(n => n.id);
-      const newOrder = newSorted.map(n => n.id);
-      const orderChanged = currentOrder.length > 0 && currentOrder.some((id, i) => id !== newOrder[i]);
-      
-      const updatedInCurrentOrder = currentOrder.map(id => newNominations.find(n => n.id === id)).filter(Boolean);
-      const newState = updatedInCurrentOrder.length ? updatedInCurrentOrder : newSorted;
-      sortedRef.current = newState;
-      setSortedNominations(newState);
-      
-      if (orderChanged) {
-        pendingRef.current = true;
-        setTimeout(() => {
-          showRankingCountdown(5, applyNewOrder);
-        }, 0);
-      } else if (!pendingRef.current) {
-        sortedRef.current = newSorted;
-        setSortedNominations(newSorted);
-      }
+      setMaxVotesPerUser(votesData.maxVotesPerUser);
+      setSortedNominations(sorted);
       
       return votesData;
     } catch (error) {
       console.error('Failed to refresh vote data:', error);
       throw error;
     }
-  }, [nightId, sortByVotes, showRankingCountdown, applyNewOrder]);
+  }, [nightId, core]);
 
   const vote = useCallback(async (nominationId) => {
     const votesBeforeVote = userRemainingVotes;
     
-    setSortedNominations(prev => {
-      const updated = prev.map(nom => 
-        nom.id === nominationId ? { ...nom, voteCount: nom.voteCount + 1 } : nom
-      );
-      sortedRef.current = updated;
-      return updated;
-    });
+    setSortedNominations(prev => core.optimisticVote(prev, nominationId, true));
     setUserRemainingVotes(prev => Math.max(0, prev - 1));
     
     try {
@@ -82,23 +121,17 @@ export function useVoting(nightId, winningMovieId = null) {
       await api.post('/votes/vote', { nominationId });
       refresh();
       if (votesBeforeVote === 1) {
-        showVotesCast();
+        core.showVotesCast();
       }
     } catch (error) {
       console.error('Vote failed:', error);
-      addNotification(error.message || 'Vote failed', 'error');
+      core.addNotification(error.message || 'Vote failed', 'error');
       refresh();
     }
-  }, [nightId, userRemainingVotes, refresh, addNotification, showVotesCast]);
+  }, [nightId, userRemainingVotes, refresh, core]);
 
   const unvote = useCallback(async (nominationId) => {
-    setSortedNominations(prev => {
-      const updated = prev.map(nom => 
-        nom.id === nominationId ? { ...nom, voteCount: Math.max(0, nom.voteCount - 1) } : nom
-      );
-      sortedRef.current = updated;
-      return updated;
-    });
+    setSortedNominations(prev => core.optimisticVote(prev, nominationId, false));
     setUserRemainingVotes(prev => prev + 1);
     
     try {
@@ -106,32 +139,26 @@ export function useVoting(nightId, winningMovieId = null) {
       refresh();
     } catch (error) {
       console.error('Unvote failed:', error);
-      addNotification(error.message || 'Unvote failed', 'error');
+      core.addNotification(error.message || 'Unvote failed', 'error');
       refresh();
     }
-  }, [nightId, refresh, addNotification]);
+  }, [refresh, core]);
 
   const initialize = useCallback((votesData, winnerId = null) => {
     winnerRef.current = winnerId;
-    latestDataRef.current = votesData.nominations;
     const sorted = sortByVotes(votesData.nominations, winnerId);
-    sortedRef.current = sorted;
+    core.sortedRef.current = sorted;
     setUserRemainingVotes(votesData.userRemainingVotes);
-    setMaxVotesPerUser(votesData.maxVotesPerUser || 3);
+    setMaxVotesPerUser(votesData.maxVotesPerUser);
     setSortedNominations(sorted);
-  }, [sortByVotes]);
+  }, [core]);
 
   const setWinner = useCallback((winnerId) => {
     winnerRef.current = winnerId;
-    const sorted = sortByVotes(sortedRef.current, winnerId);
-    sortedRef.current = sorted;
+    const sorted = sortByVotes(core.sortedRef.current, winnerId);
+    core.sortedRef.current = sorted;
     setSortedNominations(sorted);
-  }, [sortByVotes]);
-
-  const cancelRerank = useCallback(() => {
-    clearRankingCountdown();
-    pendingRef.current = false;
-  }, [clearRankingCountdown]);
+  }, [core]);
 
   return {
     sortedNominations,
@@ -142,13 +169,14 @@ export function useVoting(nightId, winningMovieId = null) {
     refresh,
     initialize,
     setWinner,
-    cancelRerank,
-    isPending: pendingRef.current
+    cancelRerank: core.cancelRerank,
+    isPending: core.pendingRef.current
   };
 }
 
 export function useMultiVoting() {
-  const { showRankingCountdown, clearRankingCountdown, addNotification, showVotesCast } = useNotifications();
+  const notifications = useNotifications();
+  const { showRankingCountdown, clearRankingCountdown, addNotification, showVotesCast } = notifications;
   
   const [sortedMap, setSortedMap] = useState({});
   const [nightsData, setNightsData] = useState({});
@@ -157,16 +185,12 @@ export function useMultiVoting() {
   const latestDataRef = useRef({});
   const sortedRef = useRef({});
 
-  const sortByVotes = useCallback((noms) => {
-    return [...noms].sort((a, b) => b.voteCount - a.voteCount);
-  }, []);
-
   const applyNewOrder = useCallback((nightId) => {
     const sorted = sortByVotes(latestDataRef.current[nightId] || []);
     sortedRef.current = { ...sortedRef.current, [nightId]: sorted };
     setSortedMap(prev => ({ ...prev, [nightId]: sorted }));
     pendingRef.current = pendingRef.current.filter(id => id !== nightId);
-  }, [sortByVotes]);
+  }, []);
 
   const refresh = useCallback(async (nightId) => {
     try {
@@ -177,7 +201,7 @@ export function useMultiVoting() {
       latestDataRef.current[nightId] = newNominations;
       setNightsData(prev => ({
         ...prev,
-        [nightId]: { userRemainingVotes: votesData.userRemainingVotes, maxVotesPerUser: votesData.maxVotesPerUser || 3 }
+        [nightId]: { userRemainingVotes: votesData.userRemainingVotes, maxVotesPerUser: votesData.maxVotesPerUser }
       }));
       
       const currentOrder = (sortedRef.current[nightId] || []).map(n => n.id);
@@ -205,7 +229,7 @@ export function useMultiVoting() {
     } catch (error) {
       console.error('Failed to refresh vote data:', error);
     }
-  }, [sortByVotes, showRankingCountdown, applyNewOrder]);
+  }, [showRankingCountdown, applyNewOrder]);
 
   const vote = useCallback(async (nominationId, nightId) => {
     const votesBeforeVote = nightsData[nightId]?.userRemainingVotes || 0;
@@ -266,16 +290,16 @@ export function useMultiVoting() {
     setSortedMap(prev => ({ ...prev, [nightId]: sorted }));
     setNightsData(prev => ({
       ...prev,
-      [nightId]: { userRemainingVotes: votesData.userRemainingVotes, maxVotesPerUser: votesData.maxVotesPerUser || 3 }
+      [nightId]: { userRemainingVotes: votesData.userRemainingVotes, maxVotesPerUser: votesData.maxVotesPerUser }
     }));
-  }, [sortByVotes]);
+  }, []);
 
   const getSorted = useCallback((nightId) => {
     return sortedMap[nightId] || [];
   }, [sortedMap]);
 
   const getData = useCallback((nightId) => {
-    return nightsData[nightId] || { userRemainingVotes: 0, maxVotesPerUser: 3 };
+    return nightsData[nightId] || { userRemainingVotes: 0, maxVotesPerUser: 0 };
   }, [nightsData]);
 
   const cancelRerank = useCallback(() => {

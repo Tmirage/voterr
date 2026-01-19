@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Film, Calendar, Clock, Users, Trophy } from 'lucide-react';
+import { Film, Calendar, Clock, Users, Trophy, XCircle } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { format, parseISO } from 'date-fns';
 
 export default function GuestJoin() {
@@ -92,7 +93,7 @@ export default function GuestJoin() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -152,7 +153,16 @@ export default function GuestJoin() {
           </div>
         </div>
 
-        {invite.topNominations && invite.topNominations.length > 0 && (
+        {invite.isCancelled ? (
+          <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-6 mb-6 text-center">
+            <XCircle className="h-12 w-12 mx-auto mb-3 text-red-500" />
+            <h2 className="text-lg text-red-400 mb-1">Movie Night Cancelled</h2>
+            <p className="text-gray-400 text-sm">This movie night has been cancelled.</p>
+            {invite.cancelReason && (
+              <p className="mt-2 text-gray-500 italic">"{invite.cancelReason}"</p>
+            )}
+          </div>
+        ) : invite.topNominations && invite.topNominations.length > 0 && (
           <div className="bg-gray-700 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Trophy className="h-4 w-4 text-yellow-500" />
@@ -233,7 +243,7 @@ export default function GuestJoin() {
                         ? 'bg-gray-600 text-gray-400' 
                         : 'bg-indigo-500/20 text-indigo-300'
                     }`}>
-                      {user.votesRemaining}/{invite.maxVotesPerUser || 3} votes
+                      {user.votesRemaining}/{invite.maxVotesPerUser} votes
                     </span>
                   </button>
                 ))}

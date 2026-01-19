@@ -1,16 +1,21 @@
 import { Router } from 'express';
-import db from '../db/index.js';
 import { requireNonGuestOrInvite } from '../middleware/auth.js';
 import { getPlexServers, getPlexLibraries, getPlexMovies, searchPlexMovies } from '../services/plex.js';
-import { getPlexToken, getSetting } from '../services/settings.js';
-import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig, getOverseerrStatus } from '../services/overseerr.js';
-import { searchMovies as searchTmdbMovies, isTmdbConfigured, validateTmdbApiKey } from '../services/tmdb.js';
+import { getPlexToken } from '../services/settings.js';
+import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig } from '../services/overseerr.js';
+import { searchMovies as searchTmdbMovies, validateTmdbApiKey } from '../services/tmdb.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
+import { getOverseerrWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
 
 const router = Router();
 
 let cachedServerUrl = null;
 let cachedMovieLibraryKey = null;
+
+export function clearPlexCache() {
+  cachedServerUrl = null;
+  cachedMovieLibraryKey = null;
+}
 
 async function getPlexServerAndLibrary(plexToken) {
   if (cachedServerUrl && cachedMovieLibraryKey) {
@@ -75,23 +80,10 @@ router.get('/search', requireNonGuestOrInvite, async (req, res) => {
   try {
     if (source === 'overseerr') {
       const movies = await searchOverseerrMovies(q);
-      const _serviceWarnings = [];
-      const overseerrStatus = getOverseerrStatus();
-      if (overseerrStatus.configured && overseerrStatus.failed) {
-        const msg = overseerrStatus.circuitOpen 
-          ? `Overseerr disabled for ${overseerrStatus.remainingMinutes} min (${overseerrStatus.error})`
-          : `Overseerr unavailable: ${overseerrStatus.error}`;
-        _serviceWarnings.push({
-          message: msg,
-          type: 'warning',
-          service: 'overseerr',
-          circuitOpen: overseerrStatus.circuitOpen,
-          remainingMinutes: overseerrStatus.remainingMinutes
-        });
-      }
+      const _serviceWarnings = collectServiceWarnings(getOverseerrWarning);
       return res.json({ 
         results: movies.slice(0, 20),
-        ...(_serviceWarnings.length > 0 && { _serviceWarnings })
+        ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
       });
     }
 

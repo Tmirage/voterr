@@ -1,18 +1,16 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { isMovieNightArchived } from '../utils/movieNight.js';
+import { isMovieNightArchived, getUpcomingSqlCondition, getArchivedSqlCondition } from '../utils/movieNight.js';
+import { getNextDateForRecurrence } from '../utils/date.js';
 import { requireAuth, requireNonGuest, requireInviteMovieNight } from '../middleware/auth.js';
+import { isGroupMember } from '../utils/group.js';
 
 const router = Router();
 
 router.get('/group/:groupId', requireNonGuest, (req, res) => {
   const { groupId } = req.params;
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(groupId, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(groupId, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -30,8 +28,8 @@ router.get('/group/:groupId', requireNonGuest, (req, res) => {
     name: s.name,
     dayOfWeek: s.day_of_week,
     time: s.time,
-    recurrenceType: s.recurrence_type || 'weekly',
-    advanceCount: s.advance_count || 1,
+    recurrenceType: s.recurrence_type,
+    advanceCount: s.advance_count,
     createdBy: s.created_by_name,
     createdAt: s.created_at
   })));
@@ -54,15 +52,11 @@ router.post('/', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'dayOfWeek is required for recurring events' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(groupId, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(groupId, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const count = Math.max(1, Math.min(advanceCount || 1, 10));
+  const count = Math.max(1, Math.min(advanceCount, 10));
   const effectiveDayOfWeek = validRecurrence === 'none' ? new Date(fixedDate).getDay() : dayOfWeek;
 
   const result = db.prepare(`
@@ -105,19 +99,15 @@ router.patch('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Schedule not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(schedule.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(schedule.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
   const newName = name !== undefined ? name : schedule.name;
   const newDayOfWeek = dayOfWeek !== undefined ? Number(dayOfWeek) : schedule.day_of_week;
   const newTime = time !== undefined ? time : schedule.time;
-  const newRecurrenceType = recurrenceType !== undefined ? recurrenceType : (schedule.recurrence_type || 'weekly');
-  const newAdvanceCount = advanceCount !== undefined ? Math.max(1, Math.min(advanceCount, 10)) : (schedule.advance_count || 1);
+  const newRecurrenceType = recurrenceType !== undefined ? recurrenceType : schedule.recurrence_type;
+  const newAdvanceCount = advanceCount !== undefined ? Math.max(1, Math.min(advanceCount, 10)) : schedule.advance_count;
 
   db.prepare(`
     UPDATE schedules 
@@ -167,11 +157,7 @@ router.delete('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Schedule not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(schedule.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(schedule.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -182,15 +168,11 @@ router.delete('/:id', requireNonGuest, (req, res) => {
 router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
   const { groupId } = req.params;
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(groupId, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(groupId, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const allNights = db.prepare(`
+  const nights = db.prepare(`
     SELECT mn.*, 
            s.name as schedule_name,
            u.username as host_name,
@@ -200,11 +182,10 @@ router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
     LEFT JOIN schedules s ON mn.schedule_id = s.id
     LEFT JOIN users u ON mn.host_id = u.id
     LEFT JOIN nominations n ON mn.winning_movie_id = n.id
-    WHERE mn.group_id = ?
+    WHERE mn.group_id = ? AND ${getUpcomingSqlCondition('mn')}
     ORDER BY mn.date ASC
+    LIMIT 50
   `).all(groupId);
-
-  const nights = allNights.filter(n => !isMovieNightArchived(n.date, n.time)).slice(0, 50);
 
   res.json(nights.map(n => ({
     id: n.id,
@@ -230,15 +211,16 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
   const limit = 5;
   const offset = page * limit;
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(groupId, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(groupId, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
-  const allNights = db.prepare(`
+  const totalCount = db.prepare(`
+    SELECT COUNT(*) as count FROM movie_nights mn
+    WHERE mn.group_id = ? AND ${getArchivedSqlCondition('mn')}
+  `).get(groupId);
+
+  const nights = db.prepare(`
     SELECT mn.*, 
            s.name as schedule_name,
            u.username as host_name,
@@ -248,14 +230,10 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
     LEFT JOIN schedules s ON mn.schedule_id = s.id
     LEFT JOIN users u ON mn.host_id = u.id
     LEFT JOIN nominations n ON mn.winning_movie_id = n.id
-    WHERE mn.group_id = ?
+    WHERE mn.group_id = ? AND ${getArchivedSqlCondition('mn')}
     ORDER BY mn.date DESC
-  `).all(groupId);
-
-  const archivedNights = allNights.filter(n => isMovieNightArchived(n.date, n.time));
-
-  const nights = archivedNights.slice(offset, offset + limit);
-  const totalCount = { count: archivedNights.length };
+    LIMIT ? OFFSET ?
+  `).all(groupId, limit, offset);
 
   res.json({
     nights: nights.map(n => ({
@@ -300,11 +278,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(night.group_id, req.session.userId);
-
-  if (!isMember) {
+  if (!isGroupMember(night.group_id, req.session.userId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -385,6 +359,9 @@ router.patch('/movie-nights/:id', requireNonGuest, (req, res) => {
   const canManage = isHost || isGroupAdmin || isAppAdmin;
 
   if (hostId !== undefined) {
+    if (!canManage) {
+      return res.status(403).json({ error: 'Only host, group admin, or app admin can change the host' });
+    }
     db.prepare('UPDATE movie_nights SET host_id = ? WHERE id = ?').run(hostId, id);
   }
 
@@ -421,32 +398,5 @@ router.post('/movie-nights/:id/attendance', requireInviteMovieNight, (req, res) 
 
   res.json({ success: true });
 });
-
-function getNextDateForRecurrence(dayOfWeek, recurrenceType, instanceOffset = 0) {
-  const today = new Date();
-  const currentDay = today.getDay();
-  const targetDay = Number(dayOfWeek);
-  let daysUntil = targetDay - currentDay;
-  
-  if (daysUntil <= 0) {
-    daysUntil += 7;
-  }
-
-  const nextDate = new Date(today);
-  nextDate.setDate(today.getDate() + daysUntil);
-
-  if (recurrenceType === 'weekly') {
-    nextDate.setDate(nextDate.getDate() + (instanceOffset * 7));
-  } else if (recurrenceType === 'biweekly') {
-    nextDate.setDate(nextDate.getDate() + (instanceOffset * 14));
-  } else if (recurrenceType === 'monthly') {
-    nextDate.setMonth(nextDate.getMonth() + instanceOffset);
-  }
-  
-  const year = nextDate.getFullYear();
-  const month = String(nextDate.getMonth() + 1).padStart(2, '0');
-  const day = String(nextDate.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 export default router;

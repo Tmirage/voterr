@@ -16,6 +16,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageCropper from '../components/ImageCropper';
+import AnimatedList from '../components/AnimatedList';
+import LoadingSpinner from '../components/LoadingSpinner';
 import DatePicker from '../components/DatePicker';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -277,11 +279,7 @@ export default function GroupDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!group) {
@@ -585,7 +583,7 @@ export default function GroupDetail() {
               <div>
                 <label className="block text-sm text-gray-400 mb-2">Votes per user</label>
                 <select
-                  value={group.maxVotesPerUser || 3}
+                  value={group.maxVotesPerUser}
                   onChange={async (e) => {
                     try {
                       await api.patch(`/groups/${id}`, { 

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Film, Search, X, Check, Grid, List, AlertTriangle } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { api } from '../lib/api';
 import clsx from 'clsx';
 
@@ -19,14 +20,24 @@ export default function NominateModal({
   const [overseerrConfigured, setOverseerrConfigured] = useState(false);
   const [tmdbConfigured, setTmdbConfigured] = useState(false);
   const [tmdbError, setTmdbError] = useState(null);
+  const scrollYRef = useRef(window.scrollY);
 
   useEffect(() => {
     loadLibrary();
     checkExternalSources();
     
-    document.body.style.overflow = 'hidden';
+    scrollYRef.current = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollYRef.current}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      window.scrollTo(0, scrollYRef.current);
     };
   }, []);
 
@@ -120,9 +131,16 @@ export default function NominateModal({
 
   const movies = getFilteredLibrary();
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
           <h2 className="text-xl text-white">Nominate a Movie</h2>
           <div className="flex items-center gap-2">
@@ -298,6 +316,7 @@ export default function NominateModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

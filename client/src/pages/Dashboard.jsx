@@ -19,7 +19,8 @@ import {
   Eye,
   EyeOff,
   Link as LinkIcon,
-  Film
+  Film,
+  XCircle
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
@@ -27,6 +28,7 @@ import HostPicker from '../components/HostPicker';
 import NominateModal from '../components/NominateModal';
 import InviteModal from '../components/InviteModal';
 import AnimatedList from '../components/AnimatedList';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -63,36 +65,18 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const groupsData = await api.get('/groups');
-      setGroups(groupsData);
-
-      const nightsPerGroup = await Promise.all(
-        groupsData.map(group => api.get(`/schedules/movie-nights/group/${group.id}`))
-      );
+      const data = await api.get('/dashboard');
+      setGroups(data.groups);
       
-      const upcomingNights = nightsPerGroup
-        .flat()
-        .filter(n => !n.isCancelled);
-
-      const nightsWithDetails = await Promise.all(
-        upcomingNights.map(async (night) => {
-          const [nightDetails, votesData] = await Promise.all([
-            api.get(`/schedules/movie-nights/${night.id}`),
-            api.get(`/votes/movie-night/${night.id}`)
-          ]);
-          voting.initialize(night.id, votesData);
-          return {
-            ...night,
-            ...nightDetails,
-            nominations: votesData.nominations,
-            userRemainingVotes: votesData.userRemainingVotes,
-            maxVotesPerUser: votesData.maxVotesPerUser || 3
-          };
-        })
-      );
-
-      nightsWithDetails.sort((a, b) => new Date(a.date) - new Date(b.date));
-      setMovieNights(nightsWithDetails);
+      data.movieNights.forEach(night => {
+        voting.initialize(night.id, { 
+          nominations: night.nominations, 
+          userRemainingVotes: night.userRemainingVotes, 
+          maxVotesPerUser: night.maxVotesPerUser 
+        });
+      });
+      
+      setMovieNights(data.movieNights);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -163,11 +147,7 @@ export default function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -206,12 +186,9 @@ export default function Dashboard() {
         <div className="space-y-6">
           {movieNights.map((night) => {
             const userAttendance = getUserAttendance(night);
-            const winner = night.nominations?.find(n => n.id === night.winningMovieId);
             const sortedNominations = getSortedNominations(night);
             const votingData = getVotingData(night);
-            const canVote = night.status === 'voting';
             const isAttending = userAttendance?.status === 'attending';
-            const canNominate = night.status === 'voting';
             const currentNominations = night.nominations?.filter(n => n.id !== night.winningMovieId) || [];
 
             return (
@@ -237,17 +214,24 @@ export default function Dashboard() {
                           </span>
                           <span>{night.groupName}</span>
                         {night.hostName ? (
-                          <button
-                            onClick={() => {
-                              setHostPickerNightId(night.id);
-                              setShowHostPicker(true);
-                            }}
-                            className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
-                          >
-                            <Crown className="h-4 w-4 text-purple-400" />
-                            {night.hostName}
-                          </button>
-                        ) : (
+                          night.isCancelled ? (
+                            <span className="flex items-center gap-1">
+                              <Crown className="h-4 w-4 text-purple-400" />
+                              {night.hostName}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setHostPickerNightId(night.id);
+                                setShowHostPicker(true);
+                              }}
+                              className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
+                            >
+                              <Crown className="h-4 w-4 text-purple-400" />
+                              {night.hostName}
+                            </button>
+                          )
+                        ) : !night.isCancelled && (
                           <button
                             onClick={() => {
                               setHostPickerNightId(night.id);
@@ -266,30 +250,34 @@ export default function Dashboard() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => handleSetAttendance(night.id, 'attending')}
-                        className={clsx(
-                          "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                          userAttendance?.status === 'attending'
-                            ? "bg-green-600 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        )}
-                      >
-                        <UserCheck className="h-5 w-5" />
-                        Attending
-                      </button>
-                      <button
-                        onClick={() => handleSetAttendance(night.id, 'absent')}
-                        className={clsx(
-                          "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                          userAttendance?.status === 'absent'
-                            ? "bg-red-600 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        )}
-                      >
-                        <UserX className="h-5 w-5" />
-                        Absent
-                      </button>
+                      {!night.isCancelled && (
+                        <>
+                        <button
+                          onClick={() => handleSetAttendance(night.id, 'attending')}
+                          className={clsx(
+                            "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                            userAttendance?.status === 'attending'
+                              ? "bg-green-600 text-white"
+                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                          )}
+                        >
+                          <UserCheck className="h-5 w-5" />
+                          Attending
+                        </button>
+                        <button
+                          onClick={() => handleSetAttendance(night.id, 'absent')}
+                          className={clsx(
+                            "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                            userAttendance?.status === 'absent'
+                              ? "bg-red-600 text-white"
+                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                          )}
+                        >
+                          <UserX className="h-5 w-5" />
+                          Absent
+                        </button>
+                        </>
+                      )}
                       <button
                         onClick={() => handleCreateInvite(night.id)}
                         className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
@@ -351,7 +339,23 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {winner ? (
+                {night.isCancelled ? (
+                  <div className="p-4 md:p-6 bg-red-900/20 border-t border-red-800/50">
+                    <div className="text-center py-4">
+                      <XCircle className="h-10 w-10 mx-auto mb-2 text-red-500" />
+                      <p className="text-red-400">This movie night has been cancelled</p>
+                      {night.cancelReason && (
+                        <p className="mt-2 text-gray-500 italic">"{night.cancelReason}"</p>
+                      )}
+                      <Link
+                        to={`/movie-night/${night.id}`}
+                        className="mt-3 inline-block text-sm text-indigo-400 hover:text-indigo-300"
+                      >
+                        View details to restore
+                      </Link>
+                    </div>
+                  </div>
+                ) : night.winner ? (
                   <div className="p-4 md:p-6 bg-gradient-to-r from-yellow-600/10 to-orange-600/10">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
@@ -368,17 +372,17 @@ export default function Dashboard() {
                       )}
                     </div>
                     <div className="flex gap-4">
-                      {winner.posterUrl && (
+                      {night.winner.posterUrl && (
                         <img
-                          src={winner.posterUrl}
-                          alt={winner.title}
+                          src={night.winner.posterUrl}
+                          alt={night.winner.title}
                           className="w-16 h-24 object-cover rounded-lg"
                         />
                       )}
                       <div>
-                        <h3 className="text-white text-lg">{winner.title}</h3>
-                        <p className="text-gray-400 text-sm">{winner.year}</p>
-                        <p className="text-gray-500 text-sm mt-1">{winner.voteCount} votes</p>
+                        <h3 className="text-white text-lg">{night.winner.title}</h3>
+                        <p className="text-gray-400 text-sm">{night.winner.year}</p>
+                        <p className="text-gray-500 text-sm mt-1">{night.winner.voteCount} votes</p>
                       </div>
                     </div>
                   </div>
@@ -389,13 +393,13 @@ export default function Dashboard() {
                         <span className="text-sm text-gray-400">
                           {currentNominations.length} nominations
                         </span>
-                        {canVote && (
+                        {night.canVote && (
                           <span className="text-xs text-gray-500">
                             {votingData.userRemainingVotes}/{votingData.maxVotesPerUser} votes left
                           </span>
                         )}
                       </div>
-                      {canNominate && (
+                      {night.canNominate && (
                         <button
                           onClick={() => {
                             setNominateNightId(night.id);
@@ -413,7 +417,7 @@ export default function Dashboard() {
                       <div className="text-center py-6">
                         <Film className="h-10 w-10 mx-auto mb-2 text-gray-600" />
                         <p className="text-gray-500 text-sm">No nominations yet</p>
-                        {canNominate && (
+                        {night.canNominate && (
                           <button
                             onClick={() => {
                               setNominateNightId(night.id);
@@ -428,14 +432,12 @@ export default function Dashboard() {
                     ) : (
                       <AnimatedList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {sortedNominations.map((nomination, index) => {
-                          const topVoteCount = sortedNominations[0]?.voteCount || 0;
-                          const isLeader = topVoteCount > 0 && nomination.voteCount === topVoteCount && !night.winningMovieId;
                           return (
                           <div
                             key={nomination.id}
                             className={clsx(
                               "bg-gray-700/50 rounded-xl p-2 flex flex-col",
-                              isLeader && "ring-2 ring-indigo-500"
+                              nomination.isLeading && "ring-2 ring-indigo-500"
                             )}
                           >
                             <div className="relative rounded-lg overflow-hidden">
@@ -457,7 +459,7 @@ export default function Dashboard() {
                                 </div>
                               )}
 
-                              {isLeader && (
+                              {nomination.isLeading && (
                                 <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] rounded">
                                   Leading
                                 </div>
@@ -495,7 +497,7 @@ export default function Dashboard() {
                               )}
                             </div>
 
-                            {canVote && !nomination.isBlocked && (
+                            {night.canVote && !nomination.isBlocked && (
                               <div className="mt-2 flex items-center justify-between">
                                 <div className="flex items-center gap-0.5 bg-gray-800 rounded-lg p-0.5">
                                   <button
@@ -529,7 +531,7 @@ export default function Dashboard() {
                                     +
                                   </button>
                                 </div>
-                                {canNominate && night.canManage && nomination.id !== night.winningMovieId && (
+                                {night.canNominate && night.canManage && nomination.id !== night.winningMovieId && (
                                   <Tooltip content="Pick as winner">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDecide(night.id, nomination.id); }}
