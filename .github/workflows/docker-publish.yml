@@ -33,7 +33,7 @@ jobs:
       - name: Test build
         run: |
           npm ci --omit=dev
-          cd client && npm ci && npm run build
+          cd client && rm -f package-lock.json && npm install && npm run build
           echo "Build successful"
 
       - name: Set up QEMU
