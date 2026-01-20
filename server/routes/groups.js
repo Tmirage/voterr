@@ -1,10 +1,15 @@
 import { Router } from 'express';
+import { randomInt } from 'crypto';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
 import { isMovieNightArchived, getUpcomingSqlCondition } from '../utils/movieNight.js';
 import { isGroupMember, isGroupAdmin } from '../utils/permissions.js';
 
 const router = Router();
+
+function generateRandomPin() {
+  return String(randomInt(0, 1000000)).padStart(6, '0');
+}
 
 router.get('/', requireNonGuest, (req, res) => {
   const isAppAdmin = req.session.isAppAdmin;
@@ -105,10 +110,12 @@ router.post('/', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'Name must be 35 characters or less' });
   }
 
+  const pin = generateRandomPin();
+  
   const result = db.prepare(`
-    INSERT INTO groups (name, description, created_by)
-    VALUES (?, ?, ?)
-  `).run(name, description, req.session.userId);
+    INSERT INTO groups (name, description, created_by, invite_pin)
+    VALUES (?, ?, ?, ?)
+  `).run(name, description, req.session.userId, pin);
 
   db.prepare(`
     INSERT INTO group_members (group_id, user_id, role)
