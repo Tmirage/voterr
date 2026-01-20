@@ -185,7 +185,7 @@ app.get('/join/:token', (req, res) => {
 });
 
 if (hasBuiltClient) {
-  app.get('*', (req, res) => {
+  app.get('/{*path}', (req, res) => {
     res.sendFile(join(clientDist, 'index.html'));
   });
 }

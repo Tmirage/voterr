@@ -3,8 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (better-sqlite3)
-RUN apk add --no-cache python3 make g++
+# Update Alpine packages and install build dependencies for native modules
+RUN apk upgrade --no-cache && \
+    apk add --no-cache python3 make g++
 
 # Copy package files
 COPY package*.json ./
@@ -27,8 +28,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies for native modules
-RUN apk add --no-cache wget tini libstdc++ su-exec shadow
+# Update Alpine packages to fix CVEs and install runtime dependencies
+RUN apk upgrade --no-cache && \
+    apk add --no-cache wget tini libstdc++ su-exec shadow
 
 # Copy built application
 COPY --from=builder /app/node_modules ./node_modules
