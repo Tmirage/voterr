@@ -21,7 +21,8 @@ import {
   Lock,
   Film,
   XCircle,
-  RotateCcw
+  RotateCcw,
+  Play
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
@@ -31,6 +32,8 @@ import InviteModal from '../components/InviteModal';
 import ConfirmModal from '../components/ConfirmModal';
 import AnimatedList from '../components/AnimatedList';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Tooltip from '../components/Tooltip';
+import MovieNightCountdown from '../components/MovieNightCountdown';
 
 export default function MovieNight() {
   const { id } = useParams();
@@ -205,54 +208,21 @@ export default function MovieNight() {
           )}
           <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl text-white">
-                {night.scheduleName || 'Movie Night'}
-              </h1>
-              <div className="flex flex-wrap items-center gap-4 mt-2 text-gray-400">
-                <span className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  {format(parseISO(night.date), 'EEEE, MMMM d, yyyy')}
-                </span>
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  {night.time}
-                </span>
-                {night.groupName && (
-                  <span>{night.groupName}</span>
-                )}
-                {isArchived && !night.isCancelled && (
-                <span className="flex items-center gap-2 text-gray-500">
+              <MovieNightCountdown
+                title={night.scheduleName || 'Movie Night'}
+                date={night.date}
+                time={night.time}
+                hostName={night.hostName}
+                onHostClick={() => setShowHostPicker(true)}
+                canChangeHost={night.canChangeHost && !isLocked && !night.isCancelled}
+                groupName={night.groupName}
+                groupDescription={night.groupDescription}
+              />
+              {isArchived && !night.isCancelled && (
+                <div className="mt-2 flex items-center gap-2 text-gray-500 text-sm">
                   <Lock className="h-4 w-4" />
                   Archived
-                </span>
-              )}
-              {night.hostName ? (
-                isLocked ? (
-                  <span className="flex items-center gap-1">
-                    <Crown className="h-4 w-4 text-purple-400" />
-                    {night.hostName}
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => setShowHostPicker(true)}
-                    className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
-                  >
-                    <Crown className="h-4 w-4 text-purple-400" />
-                    {night.hostName}
-                  </button>
-                )
-              ) : !isLocked && (
-                <button
-                  onClick={() => setShowHostPicker(true)}
-                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors underline decoration-dotted underline-offset-2"
-                >
-                  <Crown className="h-4 w-4" />
-                  Set host
-                </button>
-              )}
-              </div>
-              {night.groupDescription && (
-                <p className="text-sm text-gray-500 mt-1">{night.groupDescription}</p>
+                </div>
               )}
             </div>
 
@@ -299,37 +269,77 @@ export default function MovieNight() {
         </div>
 
 
-        <div className="mt-4 pt-4 border-t border-gray-700">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-400 flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Attendance ({night.attendance?.filter(a => a.status === 'attending').length || 0} attending)
-            </p>
-          </div>
-          {night.attendance && night.attendance.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {night.attendance.map((a) => (
-                <div
-                  key={a.userId}
-                  className={clsx(
-                    "flex items-center gap-2 px-2 py-1 rounded-full text-xs",
-                    a.status === 'attending' ? "bg-green-600/20 text-green-400" : "bg-red-600/20 text-red-400"
-                  )}
-                >
-                  {a.avatarUrl ? (
-                    <img src={a.avatarUrl} alt={a.username} className="h-4 w-4 rounded-full" />
-                  ) : (
-                    <div className="h-4 w-4 rounded-full bg-gray-600 flex items-center justify-center text-[10px]">
-                      {a.username?.[0]?.toUpperCase()}
-                    </div>
-                  )}
-                  <span>{a.username}</span>
-                  {a.status === 'attending' ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
-                </div>
-              ))}
+        {votesData?.memberVotingStatus && votesData.memberVotingStatus.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-gray-400 flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Member Status ({night.attendance?.filter(a => a.status === 'attending').length || 0} attending)
+              </p>
             </div>
-          )}
-        </div>
+            <div className="flex flex-wrap gap-2">
+              {votesData.memberVotingStatus.map((member) => {
+                const attendance = night.attendance?.find(a => a.userId === member.id);
+                const isAbsent = attendance?.status === 'absent';
+                const isAttending = attendance?.status === 'attending';
+                const noResponse = !attendance;
+                
+                return (
+                  <Tooltip 
+                    key={member.id} 
+                    content={
+                      <div className="text-xs">
+                        <p>{member.username}</p>
+                        <p className="text-gray-400">
+                          {isAbsent ? 'Absent' : isAttending ? 'Attending' : 'No response'}
+                        </p>
+                        {!isAbsent && (
+                          <p className="text-gray-400">
+                            Votes: {member.votesUsed}/{member.maxVotes}
+                            {member.votingComplete && ' ✓'}
+                          </p>
+                        )}
+                      </div>
+                    }
+                  >
+                    <div className={clsx(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs",
+                      isAbsent ? "bg-red-900/30 opacity-50" :
+                      isAttending ? (member.votingComplete ? "bg-green-900/30" : "bg-gray-700") :
+                      "bg-gray-700/50"
+                    )}>
+                      {member.avatarUrl ? (
+                        <img src={member.avatarUrl} alt="" className="h-5 w-5 rounded-full" />
+                      ) : (
+                        <div className="h-5 w-5 rounded-full bg-gray-600 flex items-center justify-center text-[9px] text-white">
+                          {member.username?.[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <span className={clsx(
+                        isAbsent ? "text-gray-500" : "text-gray-300"
+                      )}>
+                        {member.username}
+                      </span>
+                      {isAbsent ? (
+                        <UserX className="h-3.5 w-3.5 text-red-400" />
+                      ) : isAttending ? (
+                        member.votingComplete ? (
+                          <Check className="h-3.5 w-3.5 text-green-400" />
+                        ) : member.hasVoted ? (
+                          <span className="text-[10px] text-indigo-400">{member.votesUsed}/{member.maxVotes}</span>
+                        ) : (
+                          <Clock className="h-3.5 w-3.5 text-gray-500" />
+                        )
+                      ) : noResponse ? (
+                        <span className="text-[10px] text-gray-500">?</span>
+                      ) : null}
+                    </div>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {night.isCancelled && (
@@ -471,7 +481,21 @@ export default function MovieNight() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="text-lg text-white">{nomination.title}</h3>
+                        {nomination.ratingKey && voting.plexServerId && !user.isLocal && !user.isLocalInvite ? (
+                          <Tooltip content="Open in Plex">
+                            <a
+                              href={`https://app.plex.tv/desktop/#!/server/${voting.plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${nomination.ratingKey}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-white hover:text-orange-500 transition-colors"
+                            >
+                              <Play className="h-4 w-4" />
+                              <h3 className="text-lg">{nomination.title}</h3>
+                            </a>
+                          </Tooltip>
+                        ) : (
+                          <h3 className="text-lg text-white">{nomination.title}</h3>
+                        )}
                         <p className="text-sm text-gray-400">
                           {nomination.year}
                           {nomination.runtime && ` • ${nomination.runtime} min`}

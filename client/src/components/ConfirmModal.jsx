@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { isTouch, getModKey } from '../lib/platform';
 
 export default function ConfirmModal({ 
   title = 'Confirm', 
@@ -15,6 +16,12 @@ export default function ConfirmModal({
 }) {
   const [inputValue, setInputValue] = useState('');
   const scrollYRef = useRef(window.scrollY);
+  const inputRef = useRef(null);
+  const inputValueRef = useRef(inputValue);
+  const showShortcuts = !isTouch();
+  const modKey = getModKey();
+
+  inputValueRef.current = inputValue;
 
   useEffect(() => {
     scrollYRef.current = window.scrollY;
@@ -22,6 +29,23 @@ export default function ConfirmModal({
     document.body.style.top = `-${scrollYRef.current}px`;
     document.body.style.left = '0';
     document.body.style.right = '0';
+
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        onConfirm(inputValueRef.current);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
     
     return () => { 
       document.body.style.position = '';
@@ -29,8 +53,9 @@ export default function ConfirmModal({
       document.body.style.left = '';
       document.body.style.right = '';
       window.scrollTo(0, scrollYRef.current);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [onCancel, onConfirm]);
 
   return createPortal(
     <div 
@@ -55,6 +80,7 @@ export default function ConfirmModal({
               <div className="mt-4">
                 <label className="block text-sm text-gray-400 mb-1">{inputLabel}</label>
                 <input
+                  ref={inputRef}
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
@@ -65,22 +91,24 @@ export default function ConfirmModal({
             )}
           </div>
         </div>
-        <div className="mt-6 flex gap-3 justify-end">
+        <div className="mt-6 flex gap-3 justify-end items-center">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-2"
           >
             {cancelText}
+            {showShortcuts && <kbd className="text-[10px] px-1.5 py-0.5 bg-gray-700 rounded">Esc</kbd>}
           </button>
           <button
             onClick={() => onConfirm(inputValue)}
-            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
               destructive 
                 ? 'bg-red-600 hover:bg-red-700 text-white' 
                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
             }`}
           >
             {confirmText}
+            {showShortcuts && <kbd className="text-[10px] px-1.5 py-0.5 bg-black/20 rounded">{modKey}↵</kbd>}
           </button>
         </div>
       </div>

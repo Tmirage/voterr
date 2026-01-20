@@ -238,13 +238,13 @@ export default function GuestJoin() {
                       </div>
                     )}
                     <span className="flex-1 text-left">{user.username}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    <div className={`text-xs px-2.5 py-1 rounded-full ${
                       user.votesRemaining === 0 
-                        ? 'bg-gray-600 text-gray-400' 
+                        ? 'bg-red-500/20 text-red-400' 
                         : 'bg-indigo-500/20 text-indigo-300'
                     }`}>
-                      {user.votesRemaining}/{invite.maxVotesPerUser} votes
-                    </span>
+                      {user.votesRemaining} of {invite.maxVotesPerUser} votes left
+                    </div>
                   </button>
                 ))}
               </div>

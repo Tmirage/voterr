@@ -20,7 +20,8 @@ import {
   EyeOff,
   Link as LinkIcon,
   Film,
-  XCircle
+  XCircle,
+  Play
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
@@ -29,6 +30,7 @@ import NominateModal from '../components/NominateModal';
 import InviteModal from '../components/InviteModal';
 import AnimatedList from '../components/AnimatedList';
 import LoadingSpinner from '../components/LoadingSpinner';
+import MovieNightCountdown from '../components/MovieNightCountdown';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -44,6 +46,7 @@ export default function Dashboard() {
   const [inviteUrl, setInviteUrl] = useState('');
   const [showHostPicker, setShowHostPicker] = useState(false);
   const [hostPickerNightId, setHostPickerNightId] = useState(null);
+  const [plexServerId, setPlexServerId] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -67,6 +70,7 @@ export default function Dashboard() {
     try {
       const data = await api.get('/dashboard');
       setGroups(data.groups);
+      if (data.plexServerId) setPlexServerId(data.plexServerId);
       
       data.movieNights.forEach(night => {
         voting.initialize(night.id, { 
@@ -200,53 +204,23 @@ export default function Dashboard() {
                     )}
                     <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
-                        <Link to={`/movie-night/${night.id}`} className="text-lg text-white hover:text-indigo-400 transition-colors">
-                          {night.scheduleName || 'Movie Night'}
-                        </Link>
-                        <div className="flex flex-wrap items-center gap-4 mt-2 text-gray-400">
-                          <span className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            {format(parseISO(night.date), 'EEEE, MMMM d, yyyy')}
-                          </span>
-                          <span className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            {night.time}
-                          </span>
-                          <span>{night.groupName}</span>
-                        {night.hostName ? (
-                          night.isCancelled ? (
-                            <span className="flex items-center gap-1">
-                              <Crown className="h-4 w-4 text-purple-400" />
-                              {night.hostName}
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setHostPickerNightId(night.id);
-                                setShowHostPicker(true);
-                              }}
-                              className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
-                            >
-                              <Crown className="h-4 w-4 text-purple-400" />
-                              {night.hostName}
-                            </button>
-                          )
-                        ) : !night.isCancelled && (
-                          <button
-                            onClick={() => {
-                              setHostPickerNightId(night.id);
-                              setShowHostPicker(true);
-                            }}
-                            className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors underline decoration-dotted underline-offset-2"
-                          >
-                            <Crown className="h-4 w-4" />
-                            Set host
-                          </button>
-                        )}
-                        </div>
-                        {night.groupDescription && (
-                          <p className="text-sm text-gray-500 mt-1">{night.groupDescription}</p>
-                        )}
+                        <MovieNightCountdown
+                          title={
+                            <Link to={`/movie-night/${night.id}`} className="hover:text-indigo-400 transition-colors">
+                              {night.scheduleName || 'Movie Night'}
+                            </Link>
+                          }
+                          date={night.date}
+                          time={night.time}
+                          hostName={night.hostName}
+                          onHostClick={() => {
+                            setHostPickerNightId(night.id);
+                            setShowHostPicker(true);
+                          }}
+                          canChangeHost={night.canChangeHost && !night.isCancelled}
+                          groupName={night.groupName}
+                          groupDescription={night.groupDescription}
+                        />
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -289,52 +263,71 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {night.attendance && night.attendance.length > 0 && (
-                    <div className="mt-4 flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
-                        {night.attendance.filter(a => a.status === 'attending').length} attending:
-                      </span>
-                      <div className="flex -space-x-2">
-                        {night.attendance.filter(a => a.status === 'attending').slice(0, 8).map((a) => (
-                          <Tooltip key={a.userId} content={a.username}>
-                            {a.avatarUrl ? (
-                              <img
-                                src={a.avatarUrl}
-                                alt={a.username}
-                                className="h-6 w-6 rounded-full border-2 border-gray-800"
-                              />
-                            ) : (
-                              <div className="h-6 w-6 rounded-full border-2 border-gray-800 bg-gray-600 flex items-center justify-center text-[10px] text-white">
-                                {a.username?.[0]?.toUpperCase()}
-                              </div>
-                            )}
-                          </Tooltip>
-                        ))}
-                      </div>
-                      {night.attendance.filter(a => a.status === 'absent').length > 0 && (
-                        <div className="flex items-center gap-1 ml-2">
-                          <div className="flex -space-x-2">
-                            {night.attendance.filter(a => a.status === 'absent').slice(0, 4).map((a) => (
-                              <Tooltip key={a.userId} content={a.username}>
-                                {a.avatarUrl ? (
-                                  <img
-                                    src={a.avatarUrl}
-                                    alt={a.username}
-                                    className="h-5 w-5 rounded-full border-2 border-gray-800 opacity-50"
-                                  />
+                  {night.memberVotingStatus && night.memberVotingStatus.length > 0 && (
+                    <div className="mt-4 bg-gray-700/30 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-2">Member status:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {night.memberVotingStatus.map((member) => {
+                          const attendance = night.attendance?.find(a => a.userId === member.id);
+                          const isAbsent = attendance?.status === 'absent';
+                          const isAttending = attendance?.status === 'attending';
+                          const noResponse = !attendance;
+                          
+                          return (
+                            <Tooltip 
+                              key={member.id} 
+                              content={
+                                <div className="text-xs">
+                                  <p>{member.username}</p>
+                                  <p className="text-gray-400">
+                                    {isAbsent ? 'Absent' : isAttending ? 'Attending' : 'No response'}
+                                  </p>
+                                  {!isAbsent && (
+                                    <p className="text-gray-400">
+                                      Votes: {member.votesUsed}/{member.maxVotes}
+                                      {member.votingComplete && ' ✓'}
+                                    </p>
+                                  )}
+                                </div>
+                              }
+                            >
+                              <div className={clsx(
+                                "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs",
+                                isAbsent ? "bg-red-900/30 opacity-50" :
+                                isAttending ? (member.votingComplete ? "bg-green-900/30" : "bg-gray-700") :
+                                "bg-gray-700/50"
+                              )}>
+                                {member.avatarUrl ? (
+                                  <img src={member.avatarUrl} alt="" className="h-5 w-5 rounded-full" />
                                 ) : (
-                                  <div className="h-5 w-5 rounded-full border-2 border-gray-800 bg-gray-600 flex items-center justify-center text-[9px] text-white opacity-50">
-                                    {a.username?.[0]?.toUpperCase()}
+                                  <div className="h-5 w-5 rounded-full bg-gray-600 flex items-center justify-center text-[9px] text-white">
+                                    {member.username?.[0]?.toUpperCase()}
                                   </div>
                                 )}
-                              </Tooltip>
-                            ))}
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            {night.attendance.filter(a => a.status === 'absent').length} absent
-                          </span>
-                        </div>
-                      )}
+                                <span className={clsx(
+                                  "truncate max-w-[60px]",
+                                  isAbsent ? "text-gray-500" : "text-gray-300"
+                                )}>
+                                  {member.username}
+                                </span>
+                                {isAbsent ? (
+                                  <UserX className="h-3 w-3 text-red-400" />
+                                ) : isAttending ? (
+                                  member.votingComplete ? (
+                                    <Check className="h-3 w-3 text-green-400" />
+                                  ) : member.hasVoted ? (
+                                    <span className="text-[10px] text-indigo-400">{member.votesUsed}/{member.maxVotes}</span>
+                                  ) : (
+                                    <Clock className="h-3 w-3 text-gray-500" />
+                                  )
+                                ) : noResponse ? (
+                                  <span className="text-[10px] text-gray-500">?</span>
+                                ) : null}
+                              </div>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -480,7 +473,22 @@ export default function Dashboard() {
                             </div>
 
                             <div className="mt-2 flex-1">
-                              <p className="text-white text-sm truncate">{nomination.title}</p>
+                              {nomination.ratingKey && plexServerId && !user.isLocal && !user.isLocalInvite ? (
+                                <Tooltip content="Open in Plex">
+                                  <a
+                                    href={`https://app.plex.tv/desktop/#!/server/${plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${nomination.ratingKey}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-white hover:text-orange-500 transition-colors"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Play className="h-3 w-3 flex-shrink-0" />
+                                    <span className="text-sm truncate">{nomination.title}</span>
+                                  </a>
+                                </Tooltip>
+                              ) : (
+                                <p className="text-white text-sm truncate">{nomination.title}</p>
+                              )}
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={clsx(
                                   "px-2.5 py-1 rounded text-sm",

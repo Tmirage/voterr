@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
-import { isGroupMember, isGroupAdmin } from '../utils/group.js';
+import { isGroupMember, isGroupAdmin } from '../utils/permissions.js';
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.post('/create', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  if (!isGroupMember(night.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, night.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -153,7 +153,7 @@ router.post('/local-join', (req, res) => {
     return res.status(404).json({ error: 'Local user not found' });
   }
 
-  if (!isGroupMember(invite.group_id, userId)) {
+  if (!isGroupMember({ userId }, invite.group_id)) {
     db.prepare(`
       INSERT OR IGNORE INTO group_members (group_id, user_id, role)
       VALUES (?, ?, 'member')
@@ -200,7 +200,7 @@ router.post('/plex-join', requireAuth, (req, res) => {
     return res.status(410).json({ error: 'Invite link has expired' });
   }
 
-  if (!isGroupMember(invite.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, invite.group_id)) {
     db.prepare(`
       INSERT OR IGNORE INTO group_members (group_id, user_id, role)
       VALUES (?, ?, 'member')
@@ -221,7 +221,7 @@ router.get('/movie-night/:movieNightId', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  if (!isGroupAdmin(night.group_id, req.session.userId)) {
+  if (!isGroupAdmin(req.session, night.group_id)) {
     return res.status(403).json({ error: 'Only admins can view invites' });
   }
 
@@ -259,7 +259,7 @@ router.delete('/:id', requireNonGuest, (req, res) => {
 
   const isCreator = invite.created_by === req.session.userId;
 
-  if (!isGroupAdmin(invite.group_id, req.session.userId) && !isCreator) {
+  if (!isGroupAdmin(req.session, invite.group_id) && !isCreator) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 

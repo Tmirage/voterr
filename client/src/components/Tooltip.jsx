@@ -6,9 +6,15 @@ export default function Tooltip({ children, content, position = 'top' }) {
 
   if (!content) return children;
 
+  const isStringContent = typeof content === 'string';
+
   return (
     <>
-      <span data-tooltip-id={id} data-tooltip-content={content} className="inline-flex">
+      <span 
+        data-tooltip-id={id} 
+        {...(isStringContent ? { 'data-tooltip-content': content } : {})}
+        className="inline-flex"
+      >
         {children}
       </span>
       <ReactTooltip
@@ -16,6 +22,7 @@ export default function Tooltip({ children, content, position = 'top' }) {
         place={position}
         className="!bg-gray-900 !text-white !text-xs !px-2.5 !py-1.5 !rounded-lg !border !border-gray-700 !opacity-100 z-[9999]"
         delayShow={200}
+        render={isStringContent ? undefined : () => content}
       />
     </>
   );

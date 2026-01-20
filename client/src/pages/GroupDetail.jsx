@@ -14,6 +14,7 @@ import {
   Upload
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import clsx from 'clsx';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageCropper from '../components/ImageCropper';
 import AnimatedList from '../components/AnimatedList';
@@ -637,10 +638,18 @@ export default function GroupDetail() {
                       </div>
                     )}
                     <div>
-                      <p className="text-sm text-white">{member.username}</p>
-                      <p className="text-xs text-gray-500">
-                        {member.role === 'admin' ? 'Admin' : member.isLocal ? 'Local' : 'Plex'}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-white">{member.username}</p>
+                        {member.role === 'admin' && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-600/30 text-indigo-300">Group Admin</span>
+                        )}
+                      </div>
+                      <span className={clsx(
+                        "px-1.5 py-0.5 text-[10px] rounded",
+                        member.isLocal ? "bg-gray-600/50 text-gray-400" : "bg-orange-600/30 text-orange-300"
+                      )}>
+                        {member.isLocal ? 'Local' : 'Plex'}
+                      </span>
                     </div>
                   </div>
                   {member.id !== user.id && member.role !== 'admin' && (
@@ -667,6 +676,18 @@ export default function GroupDetail() {
               <p className="text-gray-400">No available users to add</p>
             ) : (
               <>
+                <button
+                  onClick={() => {
+                    if (selectedUserIds.length === availableUsers.length) {
+                      setSelectedUserIds([]);
+                    } else {
+                      setSelectedUserIds(availableUsers.map(u => u.id));
+                    }
+                  }}
+                  className="mb-3 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  {selectedUserIds.length === availableUsers.length ? 'Deselect All' : 'Select All'}
+                </button>
                 <div className="flex-1 overflow-y-auto space-y-2">
                   {availableUsers.map((u) => {
                     const isSelected = selectedUserIds.includes(u.id);

@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { requireAdmin } from '../middleware/auth.js';
-import { getSetting, setSettings } from '../services/settings.js';
+import { getSetting, setSettings, getPlexToken } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
 import { retryTautulli } from '../services/tautulli.js';
 import { retryOverseerr } from '../services/overseerr.js';
-import { clearPlexCache } from './movies.js';
+import { clearPlexCache, getPlexServerAndLibrary } from './movies.js';
 
 const router = Router();
 
@@ -119,6 +119,28 @@ router.post('/retry/overseerr', requireAdmin, (req, res) => {
 router.post('/plex/clear-cache', requireAdmin, (req, res) => {
   clearPlexCache();
   res.json({ success: true });
+});
+
+router.get('/plex/info', requireAdmin, async (req, res) => {
+  try {
+    const plexToken = getPlexToken();
+    
+    if (!plexToken) {
+      return res.json({ configured: false });
+    }
+
+    const { serverUrl, libraryKey, serverId } = await getPlexServerAndLibrary(plexToken);
+    
+    res.json({
+      configured: true,
+      serverUrl,
+      libraryId: libraryKey,
+      serverId
+    });
+  } catch (error) {
+    console.error('Failed to get Plex info:', error);
+    res.json({ configured: false, error: error.message });
+  }
 });
 
 export default router;

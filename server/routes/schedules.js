@@ -3,14 +3,14 @@ import db from '../db/index.js';
 import { isMovieNightArchived, getUpcomingSqlCondition, getArchivedSqlCondition } from '../utils/movieNight.js';
 import { getNextDateForRecurrence } from '../utils/date.js';
 import { requireAuth, requireNonGuest, requireInviteMovieNight } from '../middleware/auth.js';
-import { isGroupMember } from '../utils/group.js';
+import { isGroupMember, getPermissions } from '../utils/permissions.js';
 
 const router = Router();
 
 router.get('/group/:groupId', requireNonGuest, (req, res) => {
   const { groupId } = req.params;
 
-  if (!isGroupMember(groupId, req.session.userId)) {
+  if (!isGroupMember(req.session, groupId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -52,7 +52,7 @@ router.post('/', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'dayOfWeek is required for recurring events' });
   }
 
-  if (!isGroupMember(groupId, req.session.userId)) {
+  if (!isGroupMember(req.session, groupId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -99,7 +99,7 @@ router.patch('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Schedule not found' });
   }
 
-  if (!isGroupMember(schedule.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, schedule.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -157,7 +157,7 @@ router.delete('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Schedule not found' });
   }
 
-  if (!isGroupMember(schedule.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, schedule.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -168,7 +168,7 @@ router.delete('/:id', requireNonGuest, (req, res) => {
 router.get('/movie-nights/group/:groupId', requireNonGuest, (req, res) => {
   const { groupId } = req.params;
 
-  if (!isGroupMember(groupId, req.session.userId)) {
+  if (!isGroupMember(req.session, groupId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -211,7 +211,7 @@ router.get('/movie-nights/group/:groupId/history', requireNonGuest, (req, res) =
   const limit = 5;
   const offset = page * limit;
 
-  if (!isGroupMember(groupId, req.session.userId)) {
+  if (!isGroupMember(req.session, groupId)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -278,7 +278,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  if (!isGroupMember(night.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, night.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -297,12 +297,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
   `).all(night.group_id);
 
   const isArchived = isMovieNightArchived(night.date, night.time);
-  
-  const currentUserMembership = members.find(m => m.id === req.session.userId);
-  const isHost = night.host_id === req.session.userId;
-  const isGroupAdmin = currentUserMembership?.role === 'admin';
-  const isAppAdmin = req.session.isAdmin === true;
-  const canManage = isHost || isGroupAdmin || isAppAdmin;
+  const permissions = getPermissions(req.session, night.group_id, night);
 
   res.json({
     id: night.id,
@@ -321,7 +316,9 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     isArchived,
     isCancelled: night.is_cancelled === 1,
     cancelReason: night.cancel_reason,
-    canManage,
+    canManage: permissions.canManage,
+    canChangeHost: permissions.canChangeHost,
+    canCancel: permissions.canCancel,
     attendance: attendance.map(a => ({
       userId: a.user_id,
       username: a.username,
@@ -336,7 +333,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
   });
 });
 
-router.patch('/movie-nights/:id', requireNonGuest, (req, res) => {
+router.patch('/movie-nights/:id', requireAuth, (req, res) => {
   const { id } = req.params;
   const { hostId, isCancelled, cancelReason } = req.body;
 
@@ -345,29 +342,18 @@ router.patch('/movie-nights/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const membership = db.prepare(
-    'SELECT role FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(night.group_id, req.session.userId);
-
-  if (!membership) {
-    return res.status(403).json({ error: 'Not a member of this group' });
-  }
-
-  const isHost = night.host_id === req.session.userId;
-  const isGroupAdmin = membership.role === 'admin';
-  const isAppAdmin = req.session.isAdmin === true;
-  const canManage = isHost || isGroupAdmin || isAppAdmin;
+  const permissions = getPermissions(req.session, night.group_id, night);
 
   if (hostId !== undefined) {
-    if (!canManage) {
-      return res.status(403).json({ error: 'Only host, group admin, or app admin can change the host' });
+    if (!permissions.canChangeHost) {
+      return res.status(403).json({ error: 'Permission denied' });
     }
     db.prepare('UPDATE movie_nights SET host_id = ? WHERE id = ?').run(hostId, id);
   }
 
   if (isCancelled !== undefined) {
-    if (!canManage) {
-      return res.status(403).json({ error: 'Only host, group admin, or app admin can cancel/uncancel' });
+    if (!permissions.canCancel) {
+      return res.status(403).json({ error: 'Permission denied' });
     }
     db.prepare(`
       UPDATE movie_nights SET is_cancelled = ?, cancel_reason = ? WHERE id = ?

@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Tooltip from './Tooltip';
+import CommandMenu from './CommandMenu';
 import { 
   Home, 
   Users, 
@@ -9,9 +10,12 @@ import {
   Film,
   Menu,
   X,
-  Settings
+  Settings,
+  Command
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { api } from '../lib/api';
+import { getModKey, isTouch } from '../lib/platform';
 import clsx from 'clsx';
 
 const navigation = [
@@ -25,6 +29,22 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [stats, setStats] = useState({ groups: 0, movieNights: 0, users: 0 });
+
+  useEffect(() => {
+    if (user && !user.isLocalInvite) {
+      loadStats();
+    }
+  }, [user, location.pathname]);
+
+  async function loadStats() {
+    try {
+      const data = await api.get('/dashboard/stats');
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  }
 
   const filteredNav = navigation.filter(item => !item.adminOnly || user?.isAdmin);
 
@@ -82,6 +102,19 @@ export default function Layout({ children }) {
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-1 mt-14 lg:mt-0">
+            {!isTouch() && (
+              <button
+                onClick={() => {
+                  const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true });
+                  window.dispatchEvent(event);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 mb-2 rounded-lg text-sm text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+              >
+                <Command className="h-5 w-5" />
+                <span className="flex-1">Command Menu</span>
+                <kbd className="text-[10px] px-1.5 py-0.5 bg-gray-700 rounded">{getModKey()}K</kbd>
+              </button>
+            )}
             {filteredNav.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -97,7 +130,16 @@ export default function Layout({ children }) {
                   )}
                 >
                   <item.icon className="h-5 w-5" />
-                  {item.name}
+                  <span className="flex-1">{item.name}</span>
+                  {item.href === '/' && stats.movieNights > 0 && (
+                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded">{stats.movieNights}</span>
+                  )}
+                  {item.href === '/groups' && stats.groups > 0 && (
+                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded">{stats.groups}</span>
+                  )}
+                  {item.href === '/users' && stats.users > 0 && (
+                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded">{stats.users}</span>
+                  )}
                 </Link>
               );
             })}
@@ -147,6 +189,8 @@ export default function Layout({ children }) {
           {children}
         </div>
       </main>
+
+      <CommandMenu />
     </div>
   );
 }

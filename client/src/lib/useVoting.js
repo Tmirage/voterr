@@ -86,6 +86,7 @@ export function useVoting(nightId, winningMovieId = null) {
   const [sortedNominations, setSortedNominations] = useState([]);
   const [userRemainingVotes, setUserRemainingVotes] = useState(0);
   const [maxVotesPerUser, setMaxVotesPerUser] = useState(0);
+  const [plexServerId, setPlexServerId] = useState(null);
   
   const winnerRef = useRef(winningMovieId);
 
@@ -102,6 +103,7 @@ export function useVoting(nightId, winningMovieId = null) {
       setUserRemainingVotes(votesData.userRemainingVotes);
       setMaxVotesPerUser(votesData.maxVotesPerUser);
       setSortedNominations(sorted);
+      if (votesData.plexServerId) setPlexServerId(votesData.plexServerId);
       
       return votesData;
     } catch (error) {
@@ -151,6 +153,7 @@ export function useVoting(nightId, winningMovieId = null) {
     setUserRemainingVotes(votesData.userRemainingVotes);
     setMaxVotesPerUser(votesData.maxVotesPerUser);
     setSortedNominations(sorted);
+    if (votesData.plexServerId) setPlexServerId(votesData.plexServerId);
   }, [core]);
 
   const setWinner = useCallback((winnerId) => {
@@ -164,6 +167,7 @@ export function useVoting(nightId, winningMovieId = null) {
     sortedNominations,
     userRemainingVotes,
     maxVotesPerUser,
+    plexServerId,
     vote,
     unvote,
     refresh,

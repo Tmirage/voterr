@@ -30,6 +30,7 @@ export async function initDatabase() {
       avatar_url TEXT,
       is_local INTEGER DEFAULT 0,
       is_admin INTEGER DEFAULT 0,
+      is_app_admin INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );

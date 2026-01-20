@@ -2,10 +2,12 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest, requireNonGuestOrInvite, requireInviteMovieNight } from '../middleware/auth.js';
 import { isMovieNightLocked } from '../utils/movieNight.js';
-import { isGroupMember, isGroupAdmin } from '../utils/group.js';
 import { getAttendance } from '../utils/attendance.js';
 import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../utils/nominations.js';
 import { getTautulliWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
+import { ensurePlexServerId } from './movies.js';
+import { getPlexToken } from '../services/settings.js';
+import { getPermissions, isGroupAdmin, isGroupMember } from '../utils/permissions.js';
 
 const router = Router();
 
@@ -17,7 +19,7 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  if (!isGroupMember(night.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, night.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -48,6 +50,25 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     WHERE gm.group_id = ?
   `).all(night.group_id);
 
+  const memberVotingStatus = groupMembers.map(member => {
+    const memberVotes = db.prepare(`
+      SELECT COALESCE(SUM(v.vote_count), 0) as total
+      FROM votes v
+      JOIN nominations n ON v.nomination_id = n.id
+      WHERE n.movie_night_id = ? AND v.user_id = ?
+    `).get(movieNightId, member.id);
+    
+    return {
+      id: member.id,
+      username: member.username,
+      avatarUrl: member.avatar_url,
+      votesUsed: memberVotes?.total || 0,
+      maxVotes: maxVotes,
+      hasVoted: (memberVotes?.total || 0) > 0,
+      votingComplete: (memberVotes?.total || 0) >= maxVotes
+    };
+  });
+
   const watchedCache = await buildWatchedCache(nominations, groupMembers);
 
   const nominationsWithVotes = enrichNominations(nominations, {
@@ -63,6 +84,7 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
   const isLocked = isMovieNightLocked(night);
   const canVote = night.status === 'voting' && !isLocked;
   const canNominate = night.status === 'voting' && !isLocked;
+  const permissions = getPermissions(req.session, night.group_id, night);
 
   const nominationsWithLeader = sortAndMarkLeader(nominationsWithVotes, night.winning_movie_id);
 
@@ -73,6 +95,8 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
   const attendingCount = attendingUserIds.size;
   const absentCount = absentUserIds.size;
 
+  const plexServerId = await ensurePlexServerId(getPlexToken());
+
   res.json({
     nominations: nominationsWithLeader,
     userRemainingVotes: maxVotes - (userTotalVotes?.total || 0),
@@ -80,9 +104,14 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     isLocked,
     canVote,
     canNominate,
+    canManage: permissions.canManage,
+    canChangeHost: permissions.canChangeHost,
+    canCancel: permissions.canCancel,
     winner,
     attendingCount,
     absentCount,
+    memberVotingStatus,
+    plexServerId,
     ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
   });
 });
@@ -114,7 +143,7 @@ router.post('/nominate', requireNonGuestOrInvite, async (req, res) => {
     return res.status(400).json({ error: 'This movie night is locked' });
   }
 
-  if (!isGroupMember(night.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, night.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -178,7 +207,7 @@ router.delete('/nominations/:id', requireNonGuest, (req, res) => {
 
   const isNominator = nomination.nominated_by === req.session.userId;
 
-  if (!isGroupAdmin(nomination.group_id, req.session.userId) && !isNominator) {
+  if (!isGroupAdmin(req.session, nomination.group_id) && !isNominator) {
     return res.status(403).json({ error: 'Only the nominator or an admin can remove this nomination' });
   }
 
@@ -224,7 +253,7 @@ router.post('/vote', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'This movie night is locked' });
   }
 
-  if (!isGroupMember(nomination.group_id, req.session.userId)) {
+  if (!isGroupMember(req.session, nomination.group_id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -380,7 +409,7 @@ router.delete('/nomination/:nominationId/block', requireNonGuest, (req, res) => 
   res.json({ success: true });
 });
 
-router.post('/movie-night/:id/decide', requireNonGuest, (req, res) => {
+router.post('/movie-night/:id/decide', requireAuth, (req, res) => {
   const { id } = req.params;
   const { nominationId } = req.body;
 
@@ -389,9 +418,8 @@ router.post('/movie-night/:id/decide', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isHost = night.host_id === req.session.userId;
-
-  if (!isHost && !isGroupAdmin(night.group_id, req.session.userId)) {
+  const permissions = getPermissions(req.session, night.group_id, night);
+  if (!permissions.canDecideWinner) {
     return res.status(403).json({ error: 'Only the host or admin can decide the winner' });
   }
 
@@ -448,7 +476,7 @@ router.post('/movie-night/:id/decide', requireNonGuest, (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/movie-night/:id/undecide', requireNonGuest, (req, res) => {
+router.post('/movie-night/:id/undecide', requireAuth, (req, res) => {
   const { id } = req.params;
 
   const night = db.prepare('SELECT * FROM movie_nights WHERE id = ?').get(id);
@@ -456,9 +484,8 @@ router.post('/movie-night/:id/undecide', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Movie night not found' });
   }
 
-  const isHost = night.host_id === req.session.userId;
-
-  if (!isHost && !isGroupAdmin(night.group_id, req.session.userId)) {
+  const permissions = getPermissions(req.session, night.group_id, night);
+  if (!permissions.canDecideWinner) {
     return res.status(403).json({ error: 'Only the host or admin can undo the winner' });
   }
 

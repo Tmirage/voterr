@@ -6,9 +6,9 @@ import { Film, Check, ChevronRight, Server, Database, Loader2, X } from 'lucide-
 import clsx from 'clsx';
 
 const STEPS = [
-  { id: 'plex', title: 'Plex Account', description: 'Connect your Plex account' },
-  { id: 'overseerr', title: 'Overseerr', description: 'Optional: Browse all movies (TMDB)' },
-  { id: 'tautulli', title: 'Tautulli', description: 'Optional: Watch history tracking' }
+  { id: 'plex', title: 'Plex Account', description: 'Connect your Plex media server' },
+  { id: 'overseerr', title: 'Movie Search', description: 'Optional: Search movies beyond your Plex library' },
+  { id: 'tautulli', title: 'Watch History', description: 'Optional: Track who has seen which movies' }
 ];
 
 export default function Setup() {
@@ -207,17 +207,28 @@ export default function Setup() {
                   )}
                 </button>
               )}
-              <p className="mt-4 text-sm text-gray-500">
-                This account will become the admin of your Voterr instance.
-              </p>
+              <div className="mt-4 p-3 bg-gray-700/50 rounded-lg">
+                <p className="text-sm text-gray-300 mb-2">Your Plex library is the primary movie source:</p>
+                <ul className="text-xs text-gray-400 space-y-1">
+                  <li>- Movies from your Plex library are always available for nomination</li>
+                  <li>- This account becomes the App Admin of your Voterr instance</li>
+                  <li>- Other Plex users can be added later from your friends list</li>
+                </ul>
+              </div>
             </div>
           )}
 
           {currentStep === 1 && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-400 mb-4">
-                Overseerr is optional. It allows users to browse and nominate any movie from TMDB, not just movies in your Plex library.
-              </p>
+              <div className="p-3 bg-gray-700/50 rounded-lg mb-4">
+                <p className="text-sm text-gray-300 mb-2">Movie search sources:</p>
+                <ul className="text-xs text-gray-400 space-y-1">
+                  <li>- Plex library is always searched (no config needed)</li>
+                  <li>- Overseerr adds TMDB search with request management</li>
+                  <li>- Without Overseerr, you can add a TMDB API key later in Settings</li>
+                  <li>- Skip this step if you only want to nominate movies already in Plex</li>
+                </ul>
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">
                   <Server className="h-4 w-4 inline mr-2" />
@@ -267,9 +278,15 @@ export default function Setup() {
 
           {currentStep === 2 && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-400 mb-4">
-                Tautulli is optional but recommended. It allows Voterr to show which users have already watched a movie.
-              </p>
+              <div className="p-3 bg-gray-700/50 rounded-lg mb-4">
+                <p className="text-sm text-gray-300 mb-2">What Tautulli provides:</p>
+                <ul className="text-xs text-gray-400 space-y-1">
+                  <li>- Shows which group members have already watched a movie</li>
+                  <li>- Watch status appears on movie cards during voting</li>
+                  <li>- Helps avoid picking movies everyone has seen</li>
+                  <li>- Skip this step if you don't use Tautulli</li>
+                </ul>
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">
                   <Server className="h-4 w-4 inline mr-2" />

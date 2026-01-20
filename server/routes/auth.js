@@ -39,25 +39,23 @@ router.get('/plex/callback', async (req, res) => {
     let user = db.prepare('SELECT * FROM users WHERE plex_id = ?').get(plexUser.id.toString());
 
     if (!user) {
+      const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+      const isFirstUser = userCount.count === 0;
+      
       const result = db.prepare(`
-        INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin, is_app_admin)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         plexUser.id.toString(),
         token,
         plexUser.username,
         plexUser.email,
         plexUser.thumb,
-        0
+        isFirstUser ? 1 : 0,
+        isFirstUser ? 1 : 0
       );
 
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
-
-      const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-      if (userCount.count === 1) {
-        db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(user.id);
-        user.is_admin = 1;
-      }
     } else {
       db.prepare(`
         UPDATE users SET plex_token = ?, username = ?, email = ?, avatar_url = ?, updated_at = datetime('now')
@@ -67,6 +65,7 @@ router.get('/plex/callback', async (req, res) => {
 
     req.session.userId = user.id;
     req.session.isAdmin = user.is_admin === 1;
+    req.session.isAppAdmin = user.is_app_admin === 1;
     
     delete req.session.plexPinId;
     delete req.session.plexCode;
@@ -78,7 +77,8 @@ router.get('/plex/callback', async (req, res) => {
         username: user.username,
         email: user.email,
         avatarUrl: user.avatar_url,
-        isAdmin: user.is_admin === 1
+        isAdmin: user.is_admin === 1,
+        isAppAdmin: user.is_app_admin === 1
       }
     });
   } catch (error) {
@@ -107,6 +107,7 @@ router.get('/me', (req, res) => {
       email: user.email,
       avatarUrl: user.avatar_url,
       isAdmin: user.is_admin === 1,
+      isAppAdmin: user.is_app_admin === 1,
       isLocal: user.is_local === 1,
       isLocalInvite: req.session.isLocalInvite || false,
       localInviteMovieNightId: req.session.localInviteMovieNightId || null

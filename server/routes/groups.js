@@ -2,11 +2,13 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
 import { isMovieNightArchived, getUpcomingSqlCondition } from '../utils/movieNight.js';
-import { isGroupMember, isGroupAdmin } from '../utils/group.js';
+import { isGroupMember, isGroupAdmin } from '../utils/permissions.js';
 
 const router = Router();
 
 router.get('/', requireNonGuest, (req, res) => {
+  const isAppAdmin = req.session.isAppAdmin;
+  
   const groups = db.prepare(`
     SELECT g.*, 
            COUNT(DISTINCT gm.user_id) as member_count,
@@ -14,10 +16,10 @@ router.get('/', requireNonGuest, (req, res) => {
     FROM groups g
     LEFT JOIN group_members gm ON g.id = gm.group_id
     LEFT JOIN users u ON g.created_by = u.id
-    WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+    ${isAppAdmin ? '' : 'WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ?)'}
     GROUP BY g.id
     ORDER BY g.name
-  `).all(req.session.userId);
+  `).all(...(isAppAdmin ? [] : [req.session.userId]));
 
   const result = groups.map(g => {
     const upcomingNight = db.prepare(`
@@ -57,7 +59,7 @@ router.get('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Group not found' });
   }
 
-  if (!isGroupMember(id, req.session.userId)) {
+  if (!req.session.isAppAdmin && !isGroupMember(req.session, id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -123,7 +125,7 @@ router.post('/:id/members', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'userIds array is required' });
   }
 
-  if (!isGroupAdmin(id, req.session.userId)) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can add members' });
   }
 
@@ -144,7 +146,7 @@ router.delete('/:id/members/:userId', requireNonGuest, (req, res) => {
 
   const isSelf = parseInt(userId) === req.session.userId;
 
-  if (!isGroupAdmin(id, req.session.userId) && !isSelf) {
+  if (!isGroupAdmin(req.session, id) && !isSelf) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
@@ -156,7 +158,7 @@ router.patch('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
   const { name, description, imageUrl, maxVotesPerUser } = req.body;
 
-  if (!isGroupAdmin(id, req.session.userId)) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can update the group' });
   }
 
@@ -181,7 +183,7 @@ router.patch('/:id', requireNonGuest, (req, res) => {
 router.delete('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
 
-  if (!isGroupAdmin(id, req.session.userId)) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can delete the group' });
   }
 

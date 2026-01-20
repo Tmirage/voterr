@@ -11,15 +11,35 @@ const router = Router();
 
 let cachedServerUrl = null;
 let cachedMovieLibraryKey = null;
+let cachedServerId = null;
 
 export function clearPlexCache() {
   cachedServerUrl = null;
   cachedMovieLibraryKey = null;
+  cachedServerId = null;
 }
 
-async function getPlexServerAndLibrary(plexToken) {
-  if (cachedServerUrl && cachedMovieLibraryKey) {
-    return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey };
+export function getPlexServerId() {
+  return cachedServerId;
+}
+
+export async function ensurePlexServerId(plexToken) {
+  if (cachedServerId) return cachedServerId;
+  if (!plexToken) return null;
+  try {
+    const servers = await getPlexServers(plexToken);
+    if (servers.length > 0) {
+      cachedServerId = servers[0].clientIdentifier;
+    }
+    return cachedServerId;
+  } catch {
+    return null;
+  }
+}
+
+export async function getPlexServerAndLibrary(plexToken) {
+  if (cachedServerUrl && cachedMovieLibraryKey && cachedServerId) {
+    return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey, serverId: cachedServerId };
   }
 
   const servers = await getPlexServers(plexToken);
@@ -34,6 +54,7 @@ async function getPlexServerAndLibrary(plexToken) {
   }
 
   cachedServerUrl = connection.uri;
+  cachedServerId = server.clientIdentifier;
 
   const libraries = await getPlexLibraries(cachedServerUrl, plexToken);
   const movieLibrary = libraries.find(lib => lib.type === 'movie');
@@ -43,7 +64,7 @@ async function getPlexServerAndLibrary(plexToken) {
 
   cachedMovieLibraryKey = movieLibrary.key;
 
-  return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey };
+  return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey, serverId: cachedServerId };
 }
 
 router.get('/library', requireNonGuestOrInvite, async (req, res) => {

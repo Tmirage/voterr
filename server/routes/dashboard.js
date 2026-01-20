@@ -5,6 +5,9 @@ import { getUpcomingSqlCondition, isMovieNightLocked } from '../utils/movieNight
 import { getAttendance } from '../utils/attendance.js';
 import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../utils/nominations.js';
 import { getTautulliWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
+import { ensurePlexServerId } from './movies.js';
+import { getPlexToken } from '../services/settings.js';
+import { getPermissions } from '../utils/permissions.js';
 
 const router = Router();
 
@@ -71,13 +74,26 @@ router.get('/', requireNonGuest, async (req, res) => {
       WHERE gm.group_id = ?
     `).all(night.group_id);
 
-    const membership = groupMembers.find(m => m.id === userId);
-    const isHost = night.host_id === userId;
-    const isGroupAdmin = db.prepare(
-      "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-    ).get(night.group_id, userId);
-    const isAppAdmin = req.session.isAdmin === true;
-    const canManage = isHost || !!isGroupAdmin || isAppAdmin;
+    const memberVotingStatus = groupMembers.map(member => {
+      const memberVotes = db.prepare(`
+        SELECT COALESCE(SUM(v.vote_count), 0) as total
+        FROM votes v
+        JOIN nominations n ON v.nomination_id = n.id
+        WHERE n.movie_night_id = ? AND v.user_id = ?
+      `).get(night.id, member.id);
+      
+      return {
+        id: member.id,
+        username: member.username,
+        avatarUrl: member.avatar_url,
+        votesUsed: memberVotes?.total || 0,
+        maxVotes: night.max_votes_per_user,
+        hasVoted: (memberVotes?.total || 0) > 0,
+        votingComplete: (memberVotes?.total || 0) >= night.max_votes_per_user
+      };
+    });
+
+    const permissions = getPermissions(req.session, night.group_id, night);
 
     const watchedCache = await buildWatchedCache(nominations, groupMembers);
 
@@ -122,7 +138,9 @@ router.get('/', requireNonGuest, async (req, res) => {
       status: night.status,
       isCancelled: night.is_cancelled === 1,
       cancelReason: night.cancel_reason,
-      canManage,
+      canManage: permissions.canManage,
+      canChangeHost: permissions.canChangeHost,
+      canCancel: permissions.canCancel,
       isLocked,
       canVote,
       canNominate,
@@ -142,11 +160,13 @@ router.get('/', requireNonGuest, async (req, res) => {
         userId: m.id,
         username: m.username,
         avatarUrl: m.avatar_url
-      }))
+      })),
+      memberVotingStatus
     };
   }));
 
   const _serviceWarnings = collectServiceWarnings(getTautulliWarning);
+  const plexServerId = await ensurePlexServerId(getPlexToken());
 
   res.json({
     groups: groups.map(g => ({
@@ -158,7 +178,40 @@ router.get('/', requireNonGuest, async (req, res) => {
       memberCount: g.member_count
     })),
     movieNights: nightsWithDetails,
+    plexServerId,
     ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
+  });
+});
+
+router.get('/stats', requireNonGuest, (req, res) => {
+  const userId = req.session.userId;
+  const isAppAdmin = req.session.isAppAdmin;
+
+  const groupCount = isAppAdmin
+    ? db.prepare('SELECT COUNT(*) as count FROM groups').get().count
+    : db.prepare('SELECT COUNT(*) as count FROM group_members WHERE user_id = ?').get(userId).count;
+
+  const groupIds = isAppAdmin
+    ? db.prepare('SELECT id FROM groups').all().map(g => g.id)
+    : db.prepare('SELECT group_id as id FROM group_members WHERE user_id = ?').all(userId).map(g => g.id);
+
+  let movieNightCount = 0;
+  if (groupIds.length > 0) {
+    const placeholders = groupIds.map(() => '?').join(',');
+    movieNightCount = db.prepare(`
+      SELECT COUNT(*) as count FROM movie_nights mn
+      WHERE mn.group_id IN (${placeholders}) AND ${getUpcomingSqlCondition('mn')}
+    `).get(...groupIds).count;
+  }
+
+  const userCount = req.session.isAppAdmin
+    ? db.prepare('SELECT COUNT(*) as count FROM users').get().count
+    : 0;
+
+  res.json({
+    groups: groupCount,
+    movieNights: movieNightCount,
+    users: userCount
   });
 });
 
