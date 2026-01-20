@@ -7,15 +7,6 @@ export function getSetting(key) {
 
 const SENSITIVE_KEYS = ['plex_token', 'overseerr_api_key', 'tautulli_api_key', 'tmdb_api_key', 'session_secret', 'radarr_api_key'];
 
-export function getAllSettings() {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  const result = {};
-  for (const row of rows) {
-    result[row.key] = row.value;
-  }
-  return result;
-}
-
 export function getSafeSettings() {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const result = {};

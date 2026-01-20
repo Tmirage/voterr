@@ -1,13 +1,13 @@
 import db from '../db/index.js';
 
-export const UserRole = {
+const UserRole = {
   GUEST: 'guest',
   MEMBER: 'member',
   ADMIN: 'admin',
   APP_ADMIN: 'app_admin'
 };
 
-export function getUserRole(session, groupId = null, movieNight = null) {
+function getUserRole(session, groupId = null, movieNight = null) {
   if (!session?.userId) return UserRole.GUEST;
   
   if (session.isLocal || session.isLocalInvite) {
@@ -62,15 +62,7 @@ export function isGroupAdmin(session, groupId) {
   return membership?.role === 'admin';
 }
 
-export function isMovieNightManager(session, groupId, movieNight) {
-  if (!session?.userId) return false;
-  if (session.isLocal || session.isLocalInvite) return false;
-  if (session.isAdmin) return true;
-  if (movieNight && movieNight.host_id === session.userId) return true;
-  return isGroupAdmin(session, groupId);
-}
-
-export const Permissions = {
+const Permissions = {
   canVote: (role) => role !== null,
   canNominate: (role) => role !== null,
   

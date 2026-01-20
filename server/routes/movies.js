@@ -18,10 +18,6 @@ export function clearPlexCache() {
   cachedServerId = null;
 }
 
-export function getPlexServerId() {
-  return cachedServerId;
-}
-
 export async function ensurePlexServerId(plexToken) {
   if (cachedServerId) return cachedServerId;
   if (!plexToken) return null;

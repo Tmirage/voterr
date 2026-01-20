@@ -7,10 +7,6 @@ function getApiKey() {
   return getSetting('tmdb_api_key');
 }
 
-export function isTmdbConfigured() {
-  return !!getApiKey();
-}
-
 export async function validateTmdbApiKey() {
   const apiKey = getApiKey();
   if (!apiKey) {

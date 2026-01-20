@@ -1,4 +1,4 @@
-export function getOS() {
+function getOS() {
   if (typeof window === 'undefined') return 'unknown';
   
   const userAgent = window.navigator.userAgent.toLowerCase();
@@ -23,7 +23,7 @@ export function getOS() {
   return 'unknown';
 }
 
-export function isMac() {
+function isMac() {
   return getOS() === 'mac';
 }
 
@@ -34,12 +34,4 @@ export function isTouch() {
 
 export function getModKey() {
   return isMac() ? '⌘' : 'Ctrl';
-}
-
-export function getShortcut(key, withMod = true) {
-  if (isTouch()) return null;
-  if (withMod) {
-    return `${getModKey()}+${key}`;
-  }
-  return key;
 }
