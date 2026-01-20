@@ -186,16 +186,18 @@ app.get('/join/:token', (req, res) => {
 </html>`);
 });
 
-if (hasBuiltClient) {
-  app.get('/{*path}', (req, res) => {
-    res.sendFile(join(clientDist, 'index.html'));
-  });
-}
-
 async function start() {
   try {
     await initDatabase();
     setupRoutes();
+    
+    // Wildcard route MUST be registered AFTER API routes
+    if (hasBuiltClient) {
+      app.get('/{*path}', (req, res) => {
+        res.sendFile(join(clientDist, 'index.html'));
+      });
+    }
+    
     initScheduler();
     
     app.listen(PORT, () => {

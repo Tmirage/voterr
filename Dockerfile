@@ -32,8 +32,14 @@ RUN apk upgrade --no-cache && \
 # Copy only package files first
 COPY package*.json ./
 
-# Install production dependencies fresh (no build tooling)
-RUN npm ci --omit=dev && npm cache clean --force
+# Install production dependencies and remove prebuild-install (only needed for native module builds)
+RUN npm ci --omit=dev && \
+    rm -rf node_modules/prebuild-install node_modules/tar-fs node_modules/tar-stream \
+           node_modules/node-abi node_modules/napi-build-utils node_modules/detect-libc \
+           node_modules/expand-template node_modules/github-from-package node_modules/mkdirp-classic \
+           node_modules/simple-get node_modules/simple-concat node_modules/decompress-response \
+           node_modules/mimic-response node_modules/tunnel-agent && \
+    npm cache clean --force
 
 # Copy built frontend from builder
 COPY --from=builder /app/client/dist ./client/dist
