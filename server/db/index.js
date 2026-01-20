@@ -177,6 +177,9 @@ export async function initDatabase() {
   if (!groupColumns.some(c => c.name === 'sharing_enabled')) {
     db.exec("ALTER TABLE groups ADD COLUMN sharing_enabled INTEGER DEFAULT 1");
   }
+  if (!groupColumns.some(c => c.name === 'invite_pin')) {
+    db.exec("ALTER TABLE groups ADD COLUMN invite_pin TEXT");
+  }
 
   console.log('Database initialized');
 }

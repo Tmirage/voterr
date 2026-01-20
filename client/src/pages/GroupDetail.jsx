@@ -637,6 +637,72 @@ export default function GroupDetail() {
                   />
                 </button>
               </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm text-gray-400">Invite PIN</label>
+                  <p className="text-xs text-gray-500">Require a 6-digit PIN to access invite links</p>
+                  {group.pinError && (
+                    <p className="text-xs text-red-400 mt-1">{group.pinError}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 w-36 justify-end">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="------"
+                    value={group.invitePin || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      if (value.length <= 6) {
+                        setGroup({ ...group, invitePin: value, pinError: null });
+                      }
+                    }}
+                    onBlur={async (e) => {
+                      const value = e.target.value;
+                      if (value && value.length !== 6) {
+                        setGroup({ ...group, pinError: 'PIN must be 6 digits' });
+                        return;
+                      }
+                      try {
+                        await api.patch(`/groups/${id}`, { 
+                          name: group.name,
+                          description: group.description,
+                          imageUrl: group.imageUrl,
+                          invitePin: value || null
+                        });
+                        loadGroup();
+                      } catch (err) {
+                        console.error('Failed to update PIN:', err);
+                        setGroup({ ...group, pinError: 'Failed to save' });
+                      }
+                    }}
+                    className={`w-20 px-2 py-1.5 bg-gray-700 border rounded-lg text-white text-center font-mono focus:outline-none focus:border-indigo-500 ${
+                      group.pinError ? 'border-red-500' : 'border-gray-600'
+                    }`}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!group.invitePin) return;
+                      try {
+                        await api.patch(`/groups/${id}`, { 
+                          name: group.name,
+                          description: group.description,
+                          imageUrl: group.imageUrl,
+                          invitePin: null
+                        });
+                        loadGroup();
+                      } catch (err) {
+                        console.error('Failed to remove PIN:', err);
+                      }
+                    }}
+                    className={`text-xs w-12 ${group.invitePin ? 'text-red-400 hover:text-red-300' : 'text-transparent'}`}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
