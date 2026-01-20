@@ -4,7 +4,7 @@ import { requireAuth, requireNonGuest, requireNonGuestOrInvite, requireInviteMov
 import { isMovieNightLocked } from '../utils/movieNight.js';
 import { getAttendance } from '../utils/attendance.js';
 import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../utils/nominations.js';
-import { getTautulliWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
+import { hasUserWatchedMovie } from '../services/tautulli.js';
 import { ensurePlexServerId } from './movies.js';
 import { getPlexToken } from '../services/settings.js';
 import { getPermissions, isGroupAdmin, isGroupMember } from '../utils/permissions.js';
@@ -71,15 +71,13 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
 
   const watchedCache = await buildWatchedCache(nominations, groupMembers);
 
-  const nominationsWithVotes = enrichNominations(nominations, {
+  const nominationsWithVotes = await enrichNominations(nominations, {
     userId: req.session.userId,
     groupMembers,
     watchedCache,
     attendingUserIds,
     absentUserIds
   });
-
-  const _serviceWarnings = collectServiceWarnings(getTautulliWarning);
 
   const isLocked = isMovieNightLocked(night);
   const canVote = night.status === 'voting' && !isLocked;
@@ -111,8 +109,7 @@ router.get('/movie-night/:movieNightId', requireInviteMovieNight, async (req, re
     attendingCount,
     absentCount,
     memberVotingStatus,
-    plexServerId,
-    ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
+    plexServerId
   });
 });
 
@@ -279,7 +276,8 @@ router.post('/vote', requireAuth, async (req, res) => {
   const user = db.prepare('SELECT plex_id FROM users WHERE id = ?').get(req.session.userId);
   let hasWatched = false;
 
-  if (user?.plex_id) {
+  // Only check watch status for Plex movies
+  if (user?.plex_id && nomination.plex_rating_key) {
     try {
       hasWatched = await hasUserWatchedMovie(user.plex_id, nomination.plex_rating_key, nomination.title);
     } catch (error) {

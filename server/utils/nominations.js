@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { hasUserWatchedMovie } from '../services/tautulli.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
+import { searchOverseerrMovieRating, getOverseerrMovieByTmdbId } from '../services/overseerr.js';
 
 export async function buildWatchedCache(nominations, groupMembers) {
   const watchedCache = new Map();
@@ -26,8 +27,8 @@ export async function buildWatchedCache(nominations, groupMembers) {
   return watchedCache;
 }
 
-export function enrichNominations(nominations, { userId, groupMembers, watchedCache, attendingUserIds, absentUserIds }) {
-  return nominations.map((n) => {
+export async function enrichNominations(nominations, { userId, groupMembers, watchedCache, attendingUserIds, absentUserIds }) {
+  const enrichedNominations = await Promise.all(nominations.map(async (n) => {
     const allVotes = db.prepare(`
       SELECT v.*, u.username, u.avatar_url
       FROM votes v
@@ -58,6 +59,20 @@ export function enrichNominations(nominations, { userId, groupMembers, watchedCa
       WHERE nb.nomination_id = ?
     `).all(n.id);
 
+    // Fetch TMDB rating via Overseerr
+    let voteAverage = null;
+    try {
+      if (n.tmdb_id) {
+        const rating = await getOverseerrMovieByTmdbId(n.tmdb_id);
+        voteAverage = rating?.voteAverage || null;
+      } else if (n.title) {
+        const rating = await searchOverseerrMovieRating(n.title, n.year);
+        voteAverage = rating?.voteAverage || null;
+      }
+    } catch (e) {
+      // Ignore rating fetch errors
+    }
+
     return {
       id: n.id,
       ratingKey: n.plex_rating_key,
@@ -68,6 +83,7 @@ export function enrichNominations(nominations, { userId, groupMembers, watchedCa
       posterUrl: n.poster_url ? getProxiedImageUrl(n.poster_url) : null,
       overview: n.overview,
       runtime: n.runtime,
+      voteAverage,
       nominatedBy: { id: n.nominated_by, username: n.nominated_by_name },
       createdAt: n.created_at,
       votes: votes.map(v => ({
@@ -84,7 +100,9 @@ export function enrichNominations(nominations, { userId, groupMembers, watchedCa
       userHasVoted: !!userVote,
       userVoteCount: userVote?.vote_count || 0
     };
-  });
+  }));
+  
+  return enrichedNominations;
 }
 
 export function sortAndMarkLeader(nominations, winningMovieId) {

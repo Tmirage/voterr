@@ -2,10 +2,9 @@ import { Router } from 'express';
 import { requireNonGuestOrInvite } from '../middleware/auth.js';
 import { getPlexServers, getPlexLibraries, getPlexMovies, searchPlexMovies } from '../services/plex.js';
 import { getPlexToken } from '../services/settings.js';
-import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig } from '../services/overseerr.js';
-import { searchMovies as searchTmdbMovies, validateTmdbApiKey } from '../services/tmdb.js';
+import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig, getOverseerrMovieByTmdbId, searchOverseerrMovieRating } from '../services/overseerr.js';
+import { searchMovies as searchTmdbMovies, validateTmdbApiKey, getMovieDetails as getTmdbMovieDetails, findMovieRating } from '../services/tmdb.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
-import { getOverseerrWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
 
 const router = Router();
 
@@ -83,7 +82,8 @@ router.get('/library', requireNonGuestOrInvite, async (req, res) => {
       year: m.year,
       overview: m.summary,
       runtime: m.duration,
-      posterUrl: m.thumb
+      posterUrl: m.thumb,
+      voteAverage: m.audienceRating || m.rating || null
     })));
   } catch (error) {
     console.error('Failed to get library:', error);
@@ -101,11 +101,7 @@ router.get('/search', requireNonGuestOrInvite, async (req, res) => {
   try {
     if (source === 'overseerr') {
       const movies = await searchOverseerrMovies(q);
-      const _serviceWarnings = collectServiceWarnings(getOverseerrWarning);
-      return res.json({ 
-        results: movies.slice(0, 20),
-        ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
-      });
+      return res.json({ results: movies.slice(0, 20) });
     }
 
     if (source === 'tmdb') {
@@ -128,7 +124,8 @@ router.get('/search', requireNonGuestOrInvite, async (req, res) => {
       overview: m.summary,
       runtime: m.duration,
       posterUrl: m.thumb,
-      mediaType: 'plex'
+      mediaType: 'plex',
+      voteAverage: m.audienceRating || m.rating || null
     })));
   } catch (error) {
     console.error('Failed to search movies:', error);
@@ -197,6 +194,53 @@ router.get('/:ratingKey', requireNonGuestOrInvite, async (req, res) => {
   } catch (error) {
     console.error('Failed to get movie details:', error);
     res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+router.get('/tmdb/:tmdbId', requireNonGuestOrInvite, async (req, res) => {
+  const { tmdbId } = req.params;
+  
+  try {
+    // Try Overseerr first
+    let details = await getOverseerrMovieByTmdbId(tmdbId);
+    
+    // Fallback to TMDB
+    if (!details) {
+      details = await getTmdbMovieDetails(tmdbId);
+    }
+    
+    if (!details) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+    res.json(details);
+  } catch (error) {
+    console.error('Failed to get movie details:', error);
+    res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+router.get('/rating', requireNonGuestOrInvite, async (req, res) => {
+  const { title, year } = req.query;
+  
+  if (!title) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
+  
+  try {
+    // Try Overseerr first
+    let result = await searchOverseerrMovieRating(title, year);
+    
+    // Fallback to TMDB
+    if (!result) {
+      result = await findMovieRating(title, year);
+    }
+    
+    if (!result) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to find movie rating' });
   }
 });
 

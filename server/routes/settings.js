@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { getSetting, setSettings, getPlexToken } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
-import { retryTautulli } from '../services/tautulli.js';
-import { retryOverseerr } from '../services/overseerr.js';
+import { retryTautulli, getTautulliStatus } from '../services/tautulli.js';
+import { retryOverseerr, getOverseerrStatus } from '../services/overseerr.js';
 import { clearPlexCache, getPlexServerAndLibrary } from './movies.js';
 
 const router = Router();
@@ -106,13 +106,40 @@ router.post('/test/tmdb', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/retry/tautulli', requireAdmin, (req, res) => {
-  retryTautulli();
+router.post('/retry/tautulli', requireAdmin, async (req, res) => {
+  const result = await retryTautulli();
+  res.json(result);
+});
+
+router.post('/retry/overseerr', requireAdmin, async (req, res) => {
+  const result = await retryOverseerr();
+  res.json(result);
+});
+
+// Service status endpoint for sidebar - available to all authenticated users
+router.get('/services/status', requireAuth, (req, res) => {
+  res.json({
+    overseerr: getOverseerrStatus(),
+    tautulli: getTautulliStatus()
+  });
+});
+
+// Reset settings endpoints
+router.post('/reset/overseerr', requireAdmin, (req, res) => {
+  setSettings({
+    overseerr_url: null,
+    overseerr_api_key: null
+  });
+  retryOverseerr();
   res.json({ success: true });
 });
 
-router.post('/retry/overseerr', requireAdmin, (req, res) => {
-  retryOverseerr();
+router.post('/reset/tautulli', requireAdmin, (req, res) => {
+  setSettings({
+    tautulli_url: null,
+    tautulli_api_key: null
+  });
+  retryTautulli();
   res.json({ success: true });
 });
 

@@ -11,7 +11,10 @@ import {
   Menu,
   X,
   Settings,
-  Command
+  Command,
+  AlertTriangle,
+  RefreshCw,
+  Check
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
@@ -30,6 +33,9 @@ export default function Layout({ children }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState({ groups: 0, movieNights: 0, users: 0 });
+  const [serviceStatus, setServiceStatus] = useState({ overseerr: null, tautulli: null });
+  const [retrying, setRetrying] = useState({ overseerr: false, tautulli: false });
+  const [retrySuccess, setRetrySuccess] = useState({ overseerr: false, tautulli: false });
 
   useEffect(() => {
     if (user && !user.isLocalInvite) {
@@ -37,12 +43,66 @@ export default function Layout({ children }) {
     }
   }, [user, location.pathname]);
 
+  // Service status: load immediately on mount
+  useEffect(() => {
+    loadServiceStatus();
+  }, []);
+
+  // Service status: poll every 10s, reload on visibility change and custom events
+  useEffect(() => {
+    if (!user || user.isLocalInvite) return;
+    
+    const interval = setInterval(loadServiceStatus, 10000);
+    
+    const handleServiceChange = () => loadServiceStatus();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadServiceStatus();
+    };
+    
+    window.addEventListener('service-status-changed', handleServiceChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('service-status-changed', handleServiceChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user]);
+
   async function loadStats() {
     try {
       const data = await api.get('/dashboard/stats');
       setStats(data);
     } catch (error) {
       console.error('Failed to load stats:', error);
+    }
+  }
+
+  async function loadServiceStatus() {
+    try {
+      const data = await api.get('/settings/services/status');
+      setServiceStatus(data);
+    } catch (error) {
+      // Ignore - user may not have access
+    }
+  }
+
+  async function handleRetry(service) {
+    setRetrying(r => ({ ...r, [service]: true }));
+    try {
+      const result = await api.post(`/settings/retry/${service}`);
+      await loadServiceStatus();
+      
+      // Show success message if connection restored
+      if (result.success) {
+        setRetrySuccess(s => ({ ...s, [service]: true }));
+        setTimeout(() => setRetrySuccess(s => ({ ...s, [service]: false })), 3000);
+      }
+    } catch (error) {
+      console.error(`Failed to retry ${service}:`, error);
+      await loadServiceStatus();
+    } finally {
+      setRetrying(r => ({ ...r, [service]: false }));
     }
   }
 
@@ -143,6 +203,82 @@ export default function Layout({ children }) {
                 </Link>
               );
             })}
+
+            {/* Service status warnings and success messages */}
+            {user?.isAdmin && (serviceStatus.overseerr?.failed || serviceStatus.tautulli?.failed || retrySuccess.overseerr || retrySuccess.tautulli) && (
+              <div className="mt-4 pt-4 border-t border-gray-700 space-y-2">
+                {retrySuccess.overseerr && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 rounded-lg">
+                    <Check className="h-4 w-4 text-green-400 flex-shrink-0" />
+                    <p className="text-xs text-green-400">Overseerr connected</p>
+                  </div>
+                )}
+                {retrySuccess.tautulli && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 rounded-lg">
+                    <Check className="h-4 w-4 text-green-400 flex-shrink-0" />
+                    <p className="text-xs text-green-400">Tautulli connected</p>
+                  </div>
+                )}
+                {serviceStatus.overseerr?.failed && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-yellow-400 truncate">Overseerr</p>
+                      {serviceStatus.overseerr.remainingMinutes && (
+                        <p className="text-[10px] text-gray-500">{serviceStatus.overseerr.remainingMinutes}m until retry</p>
+                      )}
+                    </div>
+                    <Tooltip content="Settings" position="top">
+                      <Link
+                        to="/settings"
+                        onClick={() => setSidebarOpen(false)}
+                        className="p-1 text-yellow-400 hover:text-yellow-300"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip content="Retry" position="top">
+                      <button
+                        onClick={() => handleRetry('overseerr')}
+                        disabled={retrying.overseerr}
+                        className="p-1 text-yellow-400 hover:text-yellow-300 disabled:opacity-50"
+                      >
+                        <RefreshCw className={clsx("h-3.5 w-3.5", retrying.overseerr && "animate-spin")} />
+                      </button>
+                    </Tooltip>
+                  </div>
+                )}
+                {serviceStatus.tautulli?.failed && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-yellow-400 truncate">Tautulli</p>
+                      {serviceStatus.tautulli.remainingMinutes && (
+                        <p className="text-[10px] text-gray-500">{serviceStatus.tautulli.remainingMinutes}m until retry</p>
+                      )}
+                    </div>
+                    <Tooltip content="Settings" position="top">
+                      <Link
+                        to="/settings"
+                        onClick={() => setSidebarOpen(false)}
+                        className="p-1 text-yellow-400 hover:text-yellow-300"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip content="Retry" position="top">
+                      <button
+                        onClick={() => handleRetry('tautulli')}
+                        disabled={retrying.tautulli}
+                        className="p-1 text-yellow-400 hover:text-yellow-300 disabled:opacity-50"
+                      >
+                        <RefreshCw className={clsx("h-3.5 w-3.5", retrying.tautulli && "animate-spin")} />
+                      </button>
+                    </Tooltip>
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
           <div className="px-4 py-4 border-t border-gray-700">

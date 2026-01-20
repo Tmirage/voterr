@@ -34,6 +34,7 @@ import AnimatedList from '../components/AnimatedList';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Tooltip from '../components/Tooltip';
 import MovieNightCountdown from '../components/MovieNightCountdown';
+import MemberStatusList from '../components/MemberStatusList';
 
 export default function MovieNight() {
   const { id } = useParams();
@@ -52,10 +53,18 @@ export default function MovieNight() {
 
   useEffect(() => {
     loadMovieNight();
-    return () => clearRankingCountdown();
+    
+    const interval = setInterval(() => {
+      loadMovieNight(true);
+    }, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      clearRankingCountdown();
+    };
   }, [id]);
 
-  async function loadMovieNight() {
+  async function loadMovieNight(isPolling = false) {
     try {
       const [nightData, votesData] = await Promise.all([
         api.get(`/schedules/movie-nights/${id}`),
@@ -64,7 +73,9 @@ export default function MovieNight() {
       setNight(nightData);
       setNominations(votesData.nominations);
       setVotesData(votesData);
-      voting.initialize(votesData, nightData.winningMovieId);
+      if (!isPolling) {
+        voting.initialize(votesData, nightData.winningMovieId);
+      }
     } catch (error) {
       console.error('Failed to load movie night:', error);
     } finally {
@@ -277,67 +288,10 @@ export default function MovieNight() {
                 Member Status ({night.attendance?.filter(a => a.status === 'attending').length || 0} attending)
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {votesData.memberVotingStatus.map((member) => {
-                const attendance = night.attendance?.find(a => a.userId === member.id);
-                const isAbsent = attendance?.status === 'absent';
-                const isAttending = attendance?.status === 'attending';
-                const noResponse = !attendance;
-                
-                return (
-                  <Tooltip 
-                    key={member.id} 
-                    content={
-                      <div className="text-xs">
-                        <p>{member.username}</p>
-                        <p className="text-gray-400">
-                          {isAbsent ? 'Absent' : isAttending ? 'Attending' : 'No response'}
-                        </p>
-                        {!isAbsent && (
-                          <p className="text-gray-400">
-                            Votes: {member.votesUsed}/{member.maxVotes}
-                            {member.votingComplete && ' ✓'}
-                          </p>
-                        )}
-                      </div>
-                    }
-                  >
-                    <div className={clsx(
-                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs",
-                      isAbsent ? "bg-red-900/30 opacity-50" :
-                      isAttending ? (member.votingComplete ? "bg-green-900/30" : "bg-gray-700") :
-                      "bg-gray-700/50"
-                    )}>
-                      {member.avatarUrl ? (
-                        <img src={member.avatarUrl} alt="" className="h-5 w-5 rounded-full" />
-                      ) : (
-                        <div className="h-5 w-5 rounded-full bg-gray-600 flex items-center justify-center text-[9px] text-white">
-                          {member.username?.[0]?.toUpperCase()}
-                        </div>
-                      )}
-                      <span className={clsx(
-                        isAbsent ? "text-gray-500" : "text-gray-300"
-                      )}>
-                        {member.username}
-                      </span>
-                      {isAbsent ? (
-                        <UserX className="h-3.5 w-3.5 text-red-400" />
-                      ) : isAttending ? (
-                        member.votingComplete ? (
-                          <Check className="h-3.5 w-3.5 text-green-400" />
-                        ) : member.hasVoted ? (
-                          <span className="text-[10px] text-indigo-400">{member.votesUsed}/{member.maxVotes}</span>
-                        ) : (
-                          <Clock className="h-3.5 w-3.5 text-gray-500" />
-                        )
-                      ) : noResponse ? (
-                        <span className="text-[10px] text-gray-500">?</span>
-                      ) : null}
-                    </div>
-                  </Tooltip>
-                );
-              })}
-            </div>
+            <MemberStatusList 
+              members={votesData.memberVotingStatus} 
+              attendance={night.attendance} 
+            />
           </div>
         )}
       </div>
@@ -372,37 +326,55 @@ export default function MovieNight() {
       )}
 
       {!night.isCancelled && winner && (
-        <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-600/30 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Trophy className="h-6 w-6 text-yellow-500" />
-              <h2 className="text-lg text-white">Winner</h2>
-            </div>
-            {night.canManage && !isLocked && (
-              <button
-                onClick={handleUndecide}
-                className="text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                Undo winner
-              </button>
-            )}
-          </div>
+        <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-600/30 rounded-xl p-6 relative">
+          {night.canManage && !isLocked && (
+            <button
+              onClick={handleUndecide}
+              className="absolute top-2 right-2 z-10 text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              Undo winner
+            </button>
+          )}
           <div className="flex gap-4">
             {winner.posterUrl && (
               <img
                 src={winner.posterUrl}
                 alt={winner.title}
                 className="w-24 h-36 object-cover rounded-lg"
+                loading="lazy"
+                decoding="async"
               />
             )}
-            <div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Trophy className="h-5 w-5 text-yellow-500" />
+                <span className="text-sm text-yellow-400">Winner</span>
+              </div>
               <h3 className="text-xl text-white">{winner.title}</h3>
-              <p className="text-gray-400">{winner.year}</p>
+              <p className="text-gray-400">
+                {winner.year}
+                {winner.voteAverage && (
+                  <span className="ml-2 text-yellow-400">TMDB {winner.voteAverage.toFixed(1)}</span>
+                )}
+              </p>
               <p className="text-sm text-gray-400 mt-2">
                 {winner.voteCount} votes
               </p>
             </div>
           </div>
+          {winner.ratingKey && voting.plexServerId && !user.isLocal && !user.isLocalInvite && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <a
+                href={`https://app.plex.tv/desktop/#!/server/${voting.plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${winner.ratingKey}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pointer-events-auto flex items-center gap-3 px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white text-xl rounded-xl transition-colors shadow-xl"
+              >
+                <Play className="h-10 w-10" />
+                Watch on Plex
+              </a>
+            </div>
+          )}
         </div>
       )}
 
@@ -458,6 +430,8 @@ export default function MovieNight() {
                         src={nomination.posterUrl}
                         alt={nomination.title}
                         className="w-28 sm:w-32 md:w-40 aspect-[2/3] object-cover rounded-xl shadow-lg"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-28 sm:w-32 md:w-40 aspect-[2/3] bg-gray-700 rounded-xl flex items-center justify-center">
@@ -499,6 +473,9 @@ export default function MovieNight() {
                         <p className="text-sm text-gray-400">
                           {nomination.year}
                           {nomination.runtime && ` • ${nomination.runtime} min`}
+                          {nomination.voteAverage && (
+                            <span className="ml-2 text-yellow-400">TMDB {nomination.voteAverage.toFixed(1)}</span>
+                          )}
                         </p>
                       </div>
                       {nomination.id === night.winningMovieId && (

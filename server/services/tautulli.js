@@ -9,8 +9,35 @@ export function getTautulliStatus() {
   return breaker.getStatus(configured);
 }
 
-export function retryTautulli() {
+export async function retryTautulli() {
   breaker.reset();
+  
+  // Actually test the connection
+  const { url: tautulliUrl, apiKey, configured } = getTautulliConfig();
+  if (!configured) {
+    return { success: false, error: 'Not configured' };
+  }
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    
+    const response = await fetch(`${tautulliUrl}/api/v2?apikey=${apiKey}&cmd=arnold`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      breaker.recordFailure(`HTTP ${response.status}`);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    breaker.recordSuccess();
+    return { success: true };
+  } catch (error) {
+    breaker.recordFailure(error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 function getTautulliConfig() {

@@ -4,7 +4,6 @@ import { requireNonGuest } from '../middleware/auth.js';
 import { getUpcomingSqlCondition, isMovieNightLocked } from '../utils/movieNight.js';
 import { getAttendance } from '../utils/attendance.js';
 import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../utils/nominations.js';
-import { getTautulliWarning, collectServiceWarnings } from '../utils/serviceWarnings.js';
 import { ensurePlexServerId } from './movies.js';
 import { getPlexToken } from '../services/settings.js';
 import { getPermissions } from '../utils/permissions.js';
@@ -97,7 +96,7 @@ router.get('/', requireNonGuest, async (req, res) => {
 
     const watchedCache = await buildWatchedCache(nominations, groupMembers);
 
-    const nominationsWithVotes = enrichNominations(nominations, {
+    const nominationsWithVotes = await enrichNominations(nominations, {
       userId,
       groupMembers,
       watchedCache,
@@ -165,7 +164,6 @@ router.get('/', requireNonGuest, async (req, res) => {
     };
   }));
 
-  const _serviceWarnings = collectServiceWarnings(getTautulliWarning);
   const plexServerId = await ensurePlexServerId(getPlexToken());
 
   res.json({
@@ -178,8 +176,7 @@ router.get('/', requireNonGuest, async (req, res) => {
       memberCount: g.member_count
     })),
     movieNights: nightsWithDetails,
-    plexServerId,
-    ...(_serviceWarnings.length > 0 ? { _serviceWarnings } : {})
+    plexServerId
   });
 });
 

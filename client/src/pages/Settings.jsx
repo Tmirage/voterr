@@ -31,10 +31,45 @@ export default function Settings() {
     tmdb: false
   });
   const [saveMessage, setSaveMessage] = useState(null);
+  const [resetting, setResetting] = useState({ overseerr: false, tautulli: false });
 
   useEffect(() => {
     loadSettings();
   }, []);
+
+  function notifyServiceStatusChanged() {
+    window.dispatchEvent(new Event('service-status-changed'));
+  }
+
+  async function handleResetOverseerr() {
+    if (!confirm('Reset Overseerr settings? This will clear URL and API key.')) return;
+    setResetting(r => ({ ...r, overseerr: true }));
+    try {
+      await api.post('/settings/reset/overseerr');
+      setConfig(c => ({ ...c, overseerrUrl: '', overseerrApiKey: '' }));
+      setTestResults(r => ({ ...r, overseerr: null }));
+      notifyServiceStatusChanged();
+    } catch (error) {
+      console.error('Failed to reset Overseerr:', error);
+    } finally {
+      setResetting(r => ({ ...r, overseerr: false }));
+    }
+  }
+
+  async function handleResetTautulli() {
+    if (!confirm('Reset Tautulli settings? This will clear URL and API key.')) return;
+    setResetting(r => ({ ...r, tautulli: true }));
+    try {
+      await api.post('/settings/reset/tautulli');
+      setConfig(c => ({ ...c, tautulliUrl: '', tautulliApiKey: '' }));
+      setTestResults(r => ({ ...r, tautulli: null }));
+      notifyServiceStatusChanged();
+    } catch (error) {
+      console.error('Failed to reset Tautulli:', error);
+    } finally {
+      setResetting(r => ({ ...r, tautulli: false }));
+    }
+  }
 
   async function loadSettings() {
     try {
@@ -62,6 +97,7 @@ export default function Settings() {
     try {
       await api.post('/settings', config);
       setSaveMessage({ type: 'success', text: 'Settings saved' });
+      notifyServiceStatusChanged();
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
       setSaveMessage({ type: 'error', text: error.message || 'Failed to save settings' });
@@ -79,6 +115,7 @@ export default function Settings() {
         apiKey: config.overseerrApiKey
       });
       setTestResults(r => ({ ...r, overseerr: { success: true, message: 'Connected successfully' } }));
+      notifyServiceStatusChanged();
     } catch (error) {
       setTestResults(r => ({ ...r, overseerr: { success: false, message: error.message || 'Connection failed' } }));
     } finally {
@@ -95,6 +132,7 @@ export default function Settings() {
         apiKey: config.tautulliApiKey
       });
       setTestResults(r => ({ ...r, tautulli: { success: true, message: 'Connected successfully' } }));
+      notifyServiceStatusChanged();
     } catch (error) {
       setTestResults(r => ({ ...r, tautulli: { success: false, message: error.message || 'Connection failed' } }));
     } finally {
@@ -249,6 +287,18 @@ export default function Settings() {
                   'Test Connection'
                 )}
               </button>
+              <button
+                onClick={handleResetOverseerr}
+                disabled={resetting.overseerr || (!config.overseerrUrl && !config.overseerrApiKey)}
+                className="px-4 py-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {resetting.overseerr ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Reset
+              </button>
               {testResults.overseerr && (
                 <div className={clsx(
                   "flex items-center gap-2 text-sm",
@@ -363,6 +413,18 @@ export default function Settings() {
               ) : (
                 'Test Connection'
               )}
+            </button>
+            <button
+              onClick={handleResetTautulli}
+              disabled={resetting.tautulli || (!config.tautulliUrl && !config.tautulliApiKey)}
+              className="px-4 py-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {resetting.tautulli ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Reset
             </button>
             {testResults.tautulli && (
               <div className={clsx(

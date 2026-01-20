@@ -54,11 +54,27 @@ function useVotingCore({ showRankingCountdown, clearRankingCountdown, addNotific
   }, [showRankingCountdown, applyNewOrder]);
 
   const optimisticVote = useCallback((nominations, nominationId, increment) => {
-    const updated = nominations.map(nom => 
-      nom.id === nominationId 
-        ? { ...nom, voteCount: increment ? nom.voteCount + 1 : Math.max(0, nom.voteCount - 1) } 
-        : nom
-    );
+    const updated = nominations.map(nom => {
+      if (nom.id === nominationId) {
+        if (increment) {
+          return { 
+            ...nom, 
+            voteCount: nom.voteCount + 1, 
+            userVoteCount: (nom.userVoteCount || 0) + 1, 
+            userHasVoted: true 
+          };
+        } else {
+          const newUserVoteCount = Math.max(0, (nom.userVoteCount || 1) - 1);
+          return { 
+            ...nom, 
+            voteCount: Math.max(0, nom.voteCount - 1), 
+            userVoteCount: newUserVoteCount, 
+            userHasVoted: newUserVoteCount > 0 
+          };
+        }
+      }
+      return nom;
+    });
     sortedRef.current = updated;
     return updated;
   }, []);
@@ -112,38 +128,41 @@ export function useVoting(nightId, winningMovieId = null) {
     }
   }, [nightId, core]);
 
-  const vote = useCallback(async (nominationId) => {
+  const vote = useCallback((nominationId) => {
     const votesBeforeVote = userRemainingVotes;
     
+    // Optimistic update - immediate UI feedback
     setSortedNominations(prev => core.optimisticVote(prev, nominationId, true));
     setUserRemainingVotes(prev => Math.max(0, prev - 1));
     
-    try {
-      api.post(`/schedules/movie-nights/${nightId}/attendance`, { status: 'attending' });
-      await api.post('/votes/vote', { nominationId });
-      refresh();
-      if (votesBeforeVote === 1) {
-        core.showVotesCast();
-      }
-    } catch (error) {
-      console.error('Vote failed:', error);
-      core.addNotification(error.message || 'Vote failed', 'error');
-      refresh();
+    if (votesBeforeVote === 1) {
+      core.showVotesCast();
     }
+    
+    // Fire-and-forget API calls - refresh in background
+    api.post(`/schedules/movie-nights/${nightId}/attendance`, { status: 'attending' }).catch(() => {});
+    api.post('/votes/vote', { nominationId })
+      .then(() => refresh())
+      .catch(error => {
+        console.error('Vote failed:', error);
+        core.addNotification(error.message || 'Vote failed', 'error');
+        refresh();
+      });
   }, [nightId, userRemainingVotes, refresh, core]);
 
-  const unvote = useCallback(async (nominationId) => {
+  const unvote = useCallback((nominationId) => {
+    // Optimistic update - immediate UI feedback
     setSortedNominations(prev => core.optimisticVote(prev, nominationId, false));
     setUserRemainingVotes(prev => prev + 1);
     
-    try {
-      await api.delete(`/votes/vote/${nominationId}`);
-      refresh();
-    } catch (error) {
-      console.error('Unvote failed:', error);
-      core.addNotification(error.message || 'Unvote failed', 'error');
-      refresh();
-    }
+    // Fire-and-forget API call - refresh in background
+    api.delete(`/votes/vote/${nominationId}`)
+      .then(() => refresh())
+      .catch(error => {
+        console.error('Unvote failed:', error);
+        core.addNotification(error.message || 'Unvote failed', 'error');
+        refresh();
+      });
   }, [refresh, core]);
 
   const initialize = useCallback((votesData, winnerId = null) => {
@@ -235,12 +254,15 @@ export function useMultiVoting() {
     }
   }, [showRankingCountdown, applyNewOrder]);
 
-  const vote = useCallback(async (nominationId, nightId) => {
+  const vote = useCallback((nominationId, nightId) => {
     const votesBeforeVote = nightsData[nightId]?.userRemainingVotes || 0;
     
+    // Optimistic update - immediate UI feedback
     setSortedMap(prev => {
       const updated = (prev[nightId] || []).map(nom => 
-        nom.id === nominationId ? { ...nom, voteCount: nom.voteCount + 1 } : nom
+        nom.id === nominationId 
+          ? { ...nom, voteCount: nom.voteCount + 1, userVoteCount: (nom.userVoteCount || 0) + 1, userHasVoted: true } 
+          : nom
       );
       sortedRef.current = { ...sortedRef.current, [nightId]: updated };
       return { ...prev, [nightId]: updated };
@@ -250,25 +272,36 @@ export function useMultiVoting() {
       [nightId]: { ...prev[nightId], userRemainingVotes: Math.max(0, (prev[nightId]?.userRemainingVotes || 1) - 1) }
     }));
     
-    try {
-      api.post(`/schedules/movie-nights/${nightId}/attendance`, { status: 'attending' });
-      await api.post('/votes/vote', { nominationId });
-      refresh(nightId);
-      if (votesBeforeVote === 1) {
-        showVotesCast();
-      }
-    } catch (error) {
-      console.error('Vote failed:', error);
-      addNotification(error.message || 'Vote failed', 'error');
-      refresh(nightId);
+    if (votesBeforeVote === 1) {
+      showVotesCast();
     }
+    
+    // Fire-and-forget API calls - refresh in background
+    api.post(`/schedules/movie-nights/${nightId}/attendance`, { status: 'attending' }).catch(() => {});
+    api.post('/votes/vote', { nominationId })
+      .then(() => refresh(nightId))
+      .catch(error => {
+        console.error('Vote failed:', error);
+        addNotification(error.message || 'Vote failed', 'error');
+        refresh(nightId);
+      });
   }, [nightsData, refresh, addNotification, showVotesCast]);
 
-  const unvote = useCallback(async (nominationId, nightId) => {
+  const unvote = useCallback((nominationId, nightId) => {
+    // Optimistic update - immediate UI feedback
     setSortedMap(prev => {
-      const updated = (prev[nightId] || []).map(nom => 
-        nom.id === nominationId ? { ...nom, voteCount: Math.max(0, nom.voteCount - 1) } : nom
-      );
+      const updated = (prev[nightId] || []).map(nom => {
+        if (nom.id === nominationId) {
+          const newUserVoteCount = Math.max(0, (nom.userVoteCount || 1) - 1);
+          return { 
+            ...nom, 
+            voteCount: Math.max(0, nom.voteCount - 1), 
+            userVoteCount: newUserVoteCount,
+            userHasVoted: newUserVoteCount > 0
+          };
+        }
+        return nom;
+      });
       sortedRef.current = { ...sortedRef.current, [nightId]: updated };
       return { ...prev, [nightId]: updated };
     });
@@ -277,14 +310,14 @@ export function useMultiVoting() {
       [nightId]: { ...prev[nightId], userRemainingVotes: (prev[nightId]?.userRemainingVotes || 0) + 1 }
     }));
     
-    try {
-      await api.delete(`/votes/vote/${nominationId}`);
-      refresh(nightId);
-    } catch (error) {
-      console.error('Unvote failed:', error);
-      addNotification(error.message || 'Unvote failed', 'error');
-      refresh(nightId);
-    }
+    // Fire-and-forget API call - refresh in background
+    api.delete(`/votes/vote/${nominationId}`)
+      .then(() => refresh(nightId))
+      .catch(error => {
+        console.error('Unvote failed:', error);
+        addNotification(error.message || 'Unvote failed', 'error');
+        refresh(nightId);
+      });
   }, [refresh, addNotification]);
 
   const initialize = useCallback((nightId, votesData) => {
