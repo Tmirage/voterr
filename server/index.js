@@ -25,6 +25,7 @@ import settingsRoutes from './routes/settings.js';
 import imagesRoutes from './routes/images.js';
 import dashboardRoutes from './routes/dashboard.js';
 import { generateCsrfToken, csrfProtection } from './middleware/csrf.js';
+import SqliteStore from 'better-sqlite3-session-store';
 
 dotenv.config();
 
@@ -71,7 +72,16 @@ function getSessionSecret() {
 }
 
 function setupRoutes() {
+  const SessionStore = SqliteStore(session);
+  
   app.use(session({
+    store: new SessionStore({
+      client: db,
+      expired: {
+        clear: true,
+        intervalMs: 900000 // 15 min cleanup
+      }
+    }),
     secret: getSessionSecret(),
     resave: false,
     saveUninitialized: false,

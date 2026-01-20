@@ -1,6 +1,6 @@
 {
   "name": "voterr",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Film voting platform for movie nights - integrates with Plex, Radarr, and Tautulli",
   "main": "server/index.js",
   "type": "module",
@@ -24,6 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "better-sqlite3-session-store": "^0.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
