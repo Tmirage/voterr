@@ -154,12 +154,18 @@ voterr/
 
 All settings (Plex, Tautulli, Overseerr, TMDB) are configured through the web UI. Session secrets are auto-generated and stored in the database.
 
-## Security Notes
+## Security
 
-- Session secrets are auto-generated on first run and stored in the database.
-- Cookies automatically use `secure: true` when accessed via HTTPS (auto-detected via `X-Forwarded-Proto` header from reverse proxy).
-- Admin status changes for users take effect on their next login (session is not immediately updated).
-- Invite links use rate limiting (15 requests/minute per IP) to prevent brute force attacks.
+- Session secrets are auto-generated on first run and stored in the database
+- Cookies automatically use `secure: true` when accessed via HTTPS (auto-detected via `X-Forwarded-Proto` header)
+- All API endpoints require authentication except health check and setup status
+- CSRF protection on all POST/PUT/DELETE requests
+- Rate limiting on invite link validation (5 requests/minute per IP)
+- Rate limiting on PIN attempts (5 failures = 1 minute lockout per IP)
+- Groups can require a 6-digit PIN for invite links
+- Local invite users can only access their specific movie night
+- Image uploads restricted to authenticated non-guest users
+- All SQL queries use parameterized statements (no SQL injection)
 
 ## Docker Installation
 

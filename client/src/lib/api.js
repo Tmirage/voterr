@@ -18,10 +18,6 @@ export function setNotificationCallbacks(onNotification, onPlexError) {
   plexErrorCallback = onPlexError;
 }
 
-export function getNotificationCallback() {
-  return notificationCallback;
-}
-
 async function request(method, endpoint, body = null) {
   const headers = {
     'Content-Type': 'application/json'

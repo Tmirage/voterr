@@ -12,6 +12,11 @@ const pinFailMap = new Map();
 const PIN_FAIL_LIMIT = 5;
 const PIN_LOCKOUT_WINDOW = 60000;
 
+// Rate limiting for token validation: 5 requests per minute per IP
+const validateRateLimitMap = new Map();
+const VALIDATE_RATE_LIMIT = 5;
+const VALIDATE_RATE_WINDOW = 60000;
+
 function checkPinRateLimit(ip) {
   const now = Date.now();
   const entry = pinFailMap.get(ip);
@@ -64,11 +69,35 @@ function rateLimit(req, res, next) {
   next();
 }
 
+function validateRateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  let entry = validateRateLimitMap.get(ip);
+  
+  if (!entry || now - entry.windowStart > VALIDATE_RATE_WINDOW) {
+    entry = { count: 1, windowStart: now };
+    validateRateLimitMap.set(ip, entry);
+    return next();
+  }
+  
+  entry.count++;
+  if (entry.count > VALIDATE_RATE_LIMIT) {
+    const remainingSeconds = Math.ceil((entry.windowStart + VALIDATE_RATE_WINDOW - now) / 1000);
+    return res.status(429).json({ error: `Too many requests. Try again in ${remainingSeconds} seconds.` });
+  }
+  
+  next();
+}
+
 // Clean up old rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of pinFailMap) {
     if (now > entry.lockedUntil) pinFailMap.delete(ip);
+  }
+  for (const [ip, entry] of validateRateLimitMap) {
+    if (now - entry.windowStart > VALIDATE_RATE_WINDOW) validateRateLimitMap.delete(ip);
   }
 }, 300000);
 
@@ -168,7 +197,7 @@ router.post('/refresh/:id', requireNonGuest, (req, res) => {
   });
 });
 
-router.get('/validate/:token', rateLimit, (req, res) => {
+router.get('/validate/:token', validateRateLimit, rateLimit, (req, res) => {
   const { token } = req.params;
   const { pin } = req.query;
 
@@ -218,8 +247,11 @@ router.get('/validate/:token', rateLimit, (req, res) => {
   }
 
   const localUsers = db.prepare(`
-    SELECT id, username, avatar_url FROM users WHERE is_local = 1
-  `).all();
+    SELECT u.id, u.username, u.avatar_url 
+    FROM users u
+    JOIN group_members gm ON u.id = gm.user_id
+    WHERE u.is_local = 1 AND gm.group_id = ?
+  `).all(invite.group_id);
 
   const maxVotes = invite.max_votes_per_user;
   const localUsersWithVotes = localUsers.map(u => {
@@ -293,16 +325,15 @@ router.post('/local-join', rateLimit, (req, res) => {
     return res.status(410).json({ error: 'Invite link has expired' });
   }
 
-  const user = db.prepare('SELECT id, username, avatar_url, is_local FROM users WHERE id = ? AND is_local = 1').get(userId);
+  const user = db.prepare(`
+    SELECT u.id, u.username, u.avatar_url, u.is_local 
+    FROM users u
+    JOIN group_members gm ON u.id = gm.user_id
+    WHERE u.id = ? AND u.is_local = 1 AND gm.group_id = ?
+  `).get(userId, invite.group_id);
+  
   if (!user) {
-    return res.status(404).json({ error: 'Local user not found' });
-  }
-
-  if (!isGroupMember({ userId }, invite.group_id)) {
-    db.prepare(`
-      INSERT OR IGNORE INTO group_members (group_id, user_id, role)
-      VALUES (?, ?, 'member')
-    `).run(invite.group_id, userId);
+    return res.status(403).json({ error: 'User is not a member of this group' });
   }
 
   req.session.userId = userId;
