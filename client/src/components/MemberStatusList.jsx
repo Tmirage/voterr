@@ -1,6 +1,10 @@
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function MemberStatusList({ members, attendance }) {
+  const [expanded, setExpanded] = useState(false);
+  
   if (!members || members.length === 0) return null;
 
   const counts = members.reduce((acc, member) => {
@@ -13,13 +17,24 @@ export default function MemberStatusList({ members, attendance }) {
 
   return (
     <div className="bg-gray-700/30 rounded-lg p-3">
-      <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
-        <span>Member status:</span>
-        <span className="text-green-400">{counts.attending} attending</span>
-        <span className="text-red-400">{counts.absent} absent</span>
-        <span className="text-gray-400">{counts.notSet} not set</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
+      <button 
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between text-xs text-gray-500 sm:cursor-default"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-green-400">{counts.attending} attending</span>
+          <span className="text-red-400">{counts.absent} absent</span>
+          <span className="text-gray-400">{counts.notSet} not set</span>
+        </div>
+        <ChevronDown className={clsx(
+          "h-4 w-4 text-gray-500 transition-transform sm:hidden",
+          expanded && "rotate-180"
+        )} />
+      </button>
+      <div className={clsx(
+        "flex-wrap gap-2 mt-2",
+        expanded ? "flex" : "hidden sm:flex"
+      )}>
         {members.map((member) => {
           const memberAttendance = attendance?.find(a => a.userId === member.id);
           const isAbsent = memberAttendance?.status === 'absent';

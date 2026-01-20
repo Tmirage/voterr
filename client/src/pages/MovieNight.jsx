@@ -224,10 +224,13 @@ export default function MovieNight() {
   
   return (
     <div className="space-y-6">
-      <div className="bg-gray-800 rounded-xl p-6">
+      <div className="bg-gray-800 rounded-xl p-4 sm:p-6">
+        {night.groupImageUrl && (
+          <img src={night.groupImageUrl} alt="" className="w-full h-32 sm:hidden rounded-xl object-cover mb-4" />
+        )}
         <div className="flex gap-4">
           {night.groupImageUrl && (
-            <img src={night.groupImageUrl} alt="" className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
+            <img src={night.groupImageUrl} alt="" className="hidden sm:block w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
           )}
           <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>

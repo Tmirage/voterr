@@ -219,9 +219,12 @@ export default function Dashboard() {
             return (
               <div key={night.id} className="bg-gray-800 rounded-xl overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-gray-700">
+                  {night.groupImageUrl && (
+                    <img src={night.groupImageUrl} alt="" className="w-full h-32 sm:hidden rounded-xl object-cover mb-4" />
+                  )}
                   <div className="flex gap-4">
                     {night.groupImageUrl && (
-                      <img src={night.groupImageUrl} alt="" className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
+                      <img src={night.groupImageUrl} alt="" className="hidden sm:block w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
                     )}
                     <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
@@ -543,15 +546,12 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="px-4 md:px-6 py-3 bg-gray-700/30 border-t border-gray-700">
-                  <Link
-                    to={`/movie-night/${night.id}`}
-                    className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    View full details
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
+                <Link
+                  to={`/movie-night/${night.id}`}
+                  className="block px-4 md:px-6 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border-t border-indigo-500/20 text-center text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  View full details →
+                </Link>
               </div>
             );
           })}
