@@ -68,11 +68,9 @@ cd client && npm install && cd ..
 npm run dev
 ```
 
-This starts:
-- Frontend on `http://localhost:5173` (with hot reload)
-- Backend API on port 5056 (proxied via frontend)
+This starts the frontend dev server with hot reload on `http://localhost:5173`, which proxies API requests to the backend on port 5056.
 
-Open `http://localhost:5173` to access the app.
+In production (Docker), the backend serves the built frontend directly on a single port.
 
 ### Project Structure
 ```
