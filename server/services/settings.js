@@ -14,6 +14,14 @@ export function getAllSettings() {
   return result;
 }
 
+export function setSetting(key, value) {
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
+  `).run(key, value, value);
+}
+
 export function setSettings(settings) {
   const stmt = db.prepare(`
     INSERT INTO settings (key, value, updated_at)
