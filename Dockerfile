@@ -3,8 +3,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (better-sqlite3)
-RUN apk add --no-cache python3 make g++
+# Install build dependencies for native modules (better-sqlite3) and update npm
+RUN apk add --no-cache python3 make g++ && \
+    npm install -g npm@latest
 
 # Copy package files
 COPY package*.json ./
@@ -25,9 +26,10 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Update Alpine packages to fix CVEs and install minimal runtime dependencies
+# Update Alpine packages to fix CVEs, install minimal runtime dependencies, and update npm
 RUN apk upgrade --no-cache && \
-    apk add --no-cache tini libstdc++ su-exec
+    apk add --no-cache tini libstdc++ su-exec && \
+    npm install -g npm@latest
 
 # Copy only package files first
 COPY package*.json ./
