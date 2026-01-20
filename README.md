@@ -69,8 +69,10 @@ npm run dev
 ```
 
 This starts:
-- Backend on `http://localhost:5056`
-- Frontend on `http://localhost:5173` (proxies API to backend)
+- Frontend on `http://localhost:5173` (with hot reload)
+- Backend API on port 5056 (proxied via frontend)
+
+Open `http://localhost:5173` to access the app.
 
 ### Project Structure
 ```
