@@ -12,11 +12,6 @@ const pinFailMap = new Map();
 const PIN_FAIL_LIMIT = 5;
 const PIN_LOCKOUT_WINDOW = 60000;
 
-// Rate limiting for token validation: 5 requests per minute per IP
-const validateRateLimitMap = new Map();
-const VALIDATE_RATE_LIMIT = 5;
-const VALIDATE_RATE_WINDOW = 60000;
-
 function checkPinRateLimit(ip) {
   const now = Date.now();
   const entry = pinFailMap.get(ip);
@@ -69,35 +64,11 @@ function rateLimit(req, res, next) {
   next();
 }
 
-function validateRateLimit(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress;
-  const now = Date.now();
-  
-  let entry = validateRateLimitMap.get(ip);
-  
-  if (!entry || now - entry.windowStart > VALIDATE_RATE_WINDOW) {
-    entry = { count: 1, windowStart: now };
-    validateRateLimitMap.set(ip, entry);
-    return next();
-  }
-  
-  entry.count++;
-  if (entry.count > VALIDATE_RATE_LIMIT) {
-    const remainingSeconds = Math.ceil((entry.windowStart + VALIDATE_RATE_WINDOW - now) / 1000);
-    return res.status(429).json({ error: `Too many requests. Try again in ${remainingSeconds} seconds.` });
-  }
-  
-  next();
-}
-
 // Clean up old rate limit entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of pinFailMap) {
     if (now > entry.lockedUntil) pinFailMap.delete(ip);
-  }
-  for (const [ip, entry] of validateRateLimitMap) {
-    if (now - entry.windowStart > VALIDATE_RATE_WINDOW) validateRateLimitMap.delete(ip);
   }
 }, 300000);
 
@@ -197,12 +168,12 @@ router.post('/refresh/:id', requireNonGuest, (req, res) => {
   });
 });
 
-router.get('/validate/:token', validateRateLimit, rateLimit, (req, res) => {
+router.get('/validate/:token', rateLimit, (req, res) => {
   const { token } = req.params;
   const { pin } = req.query;
 
   const invite = db.prepare(`
-    SELECT gi.*, mn.date, mn.time, mn.status, mn.is_cancelled, mn.cancel_reason, g.name as group_name, g.description as group_description, g.image_url as group_image_url, g.max_votes_per_user, g.sharing_enabled, g.invite_pin
+    SELECT gi.*, mn.date, mn.time, mn.status, mn.is_cancelled, mn.cancel_reason, mn.group_id, g.name as group_name, g.description as group_description, g.image_url as group_image_url, g.max_votes_per_user, g.sharing_enabled, g.invite_pin
     FROM guest_invites gi
     JOIN movie_nights mn ON gi.movie_night_id = mn.id
     JOIN groups g ON mn.group_id = g.id
