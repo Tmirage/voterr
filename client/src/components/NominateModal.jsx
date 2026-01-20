@@ -151,12 +151,12 @@ export default function NominateModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
       onClick={onClose}
     >
       <div 
-        className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] my-auto overflow-hidden flex flex-col shadow-2xl"
+        className="bg-gray-800 rounded-xl w-full max-w-4xl h-[calc(100vh-1rem)] sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-700 flex items-center justify-between">
