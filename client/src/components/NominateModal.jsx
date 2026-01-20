@@ -28,17 +28,12 @@ export default function NominateModal({
     checkExternalSources();
     
     scrollYRef.current = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollYRef.current}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
     
     return () => {
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      document.body.style.right = '';
-      window.scrollTo(0, scrollYRef.current);
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
     };
   }, []);
 
@@ -296,7 +291,7 @@ export default function NominateModal({
                     )}
                   >
                     {movie.posterUrl ? (
-                      <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover" />
+                      <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover" loading="lazy" />
                     ) : (
                       <div className="w-full aspect-[2/3] bg-gray-700 flex items-center justify-center">
                         <Film className="h-8 w-8 text-gray-500" />
@@ -338,7 +333,7 @@ export default function NominateModal({
                     )}
                   >
                     {movie.posterUrl ? (
-                      <img src={movie.posterUrl} alt={movie.title} className="w-12 h-18 object-cover rounded" />
+                      <img src={movie.posterUrl} alt={movie.title} className="w-12 h-18 object-cover rounded" loading="lazy" />
                     ) : (
                       <div className="w-12 h-18 bg-gray-600 rounded flex items-center justify-center">
                         <Film className="h-6 w-6 text-gray-500" />

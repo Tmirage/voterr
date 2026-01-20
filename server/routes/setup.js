@@ -228,7 +228,8 @@ router.post('/complete', async (req, res) => {
         username: user.username,
         email: user.email,
         avatarUrl: user.avatar_url,
-        isAdmin: true
+        isAdmin: true,
+        isAppAdmin: true
       }
     });
   } catch (error) {

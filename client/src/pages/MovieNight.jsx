@@ -501,9 +501,19 @@ export default function MovieNight() {
                       )}
                     </div>
 
-                    <p className="text-sm text-gray-500 mt-1">
-                      Nominated by {nomination.nominatedBy.username}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-sm text-gray-500">
+                        Nominated by {nomination.nominatedBy.username}
+                      </p>
+                      {canNominate && (nomination.nominatedBy.id === user.id || night.canManage) && (
+                        <button
+                          onClick={() => handleUnnominate(nomination.id)}
+                          className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
 
                     {nomination.overview && (
                       <p className="text-sm text-gray-400 mt-2 line-clamp-2">
