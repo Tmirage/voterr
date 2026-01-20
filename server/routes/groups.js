@@ -71,6 +71,8 @@ router.get('/:id', requireNonGuest, (req, res) => {
     ORDER BY u.username
   `).all(id);
 
+  const isAdmin = isGroupAdmin(req.session, id);
+
   res.json({
     id: group.id,
     name: group.name,
@@ -78,6 +80,8 @@ router.get('/:id', requireNonGuest, (req, res) => {
     imageUrl: group.image_url,
     maxVotesPerUser: group.max_votes_per_user,
     sharingEnabled: group.sharing_enabled !== 0,
+    hasInvitePin: !!group.invite_pin,
+    invitePin: isAdmin ? group.invite_pin : undefined,
     createdAt: group.created_at,
     members: members.map(m => ({
       id: m.id,
@@ -157,7 +161,7 @@ router.delete('/:id/members/:userId', requireNonGuest, (req, res) => {
 
 router.patch('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
-  const { name, description, imageUrl, maxVotesPerUser, sharingEnabled } = req.body;
+  const { name, description, imageUrl, maxVotesPerUser, sharingEnabled, invitePin } = req.body;
 
   if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can update the group' });
@@ -171,18 +175,34 @@ router.patch('/:id', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'Name must be 35 characters or less' });
   }
 
+  if (invitePin !== undefined && invitePin !== null && invitePin !== '') {
+    if (!/^\d{6}$/.test(invitePin)) {
+      return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
+    }
+  }
+
   const votes = maxVotesPerUser !== undefined ? Math.max(1, Math.min(10, parseInt(maxVotesPerUser))) : null;
   const sharing = sharingEnabled !== undefined ? (sharingEnabled ? 1 : 0) : null;
+  const pin = invitePin !== undefined ? (invitePin || null) : undefined;
   
-  if (votes !== null && sharing !== null) {
-    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, sharing, id);
-  } else if (votes !== null) {
-    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, id);
-  } else if (sharing !== null) {
-    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, sharing, id);
-  } else {
-    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, id);
-  }
+  db.prepare(`
+    UPDATE groups SET 
+      name = ?, 
+      description = ?, 
+      image_url = ?
+      ${votes !== null ? ', max_votes_per_user = ?' : ''}
+      ${sharing !== null ? ', sharing_enabled = ?' : ''}
+      ${pin !== undefined ? ', invite_pin = ?' : ''}
+    WHERE id = ?
+  `).run(
+    name.trim(), 
+    description || null, 
+    imageUrl || null,
+    ...(votes !== null ? [votes] : []),
+    ...(sharing !== null ? [sharing] : []),
+    ...(pin !== undefined ? [pin] : []),
+    id
+  );
   res.json({ success: true });
 });
 

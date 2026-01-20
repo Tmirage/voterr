@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Film, Calendar, Clock, Users, Trophy, XCircle } from 'lucide-react';
+import { Film, Calendar, Clock, Users, Trophy, XCircle, Lock } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, parseISO } from 'date-fns';
 
@@ -18,19 +18,83 @@ export default function GuestJoin() {
   const [plexLoading, setPlexLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const [plexPopup, setPlexPopup] = useState(null);
+  const [requiresPin, setRequiresPin] = useState(false);
+  const [pinGroupInfo, setPinGroupInfo] = useState(null);
+  const [pin, setPin] = useState(['', '', '', '', '', '']);
+  const [pinError, setPinError] = useState(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const pinRefs = useRef([]);
 
   useEffect(() => {
     validateInvite();
   }, [token]);
 
-  async function validateInvite() {
+  async function validateInvite(pinCode = null) {
     try {
-      const data = await api.get(`/invites/validate/${token}`);
+      setLoading(true);
+      const url = pinCode 
+        ? `/invites/validate/${token}?pin=${pinCode}`
+        : `/invites/validate/${token}`;
+      const data = await api.get(url);
+      
+      if (data.requiresPin) {
+        setRequiresPin(true);
+        setPinGroupInfo(data);
+        setLoading(false);
+        return;
+      }
+      
+      setRequiresPin(false);
       setInvite(data);
     } catch (err) {
-      setError(err.message);
+      if (err.message === 'Invalid PIN') {
+        setPinError('Invalid PIN. Please try again.');
+        setPin(['', '', '', '', '', '']);
+        pinRefs.current[0]?.focus();
+      } else if (err.message.includes('Too many requests')) {
+        setPinError('Too many attempts. Please wait a minute and try again.');
+        setPin(['', '', '', '', '', '']);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
+      setPinLoading(false);
+    }
+  }
+
+  function handlePinChange(index, value) {
+    if (!/^\d*$/.test(value)) return;
+    
+    const newPin = [...pin];
+    newPin[index] = value.slice(-1);
+    setPin(newPin);
+    setPinError(null);
+
+    if (value && index < 5) {
+      pinRefs.current[index + 1]?.focus();
+    }
+
+    if (newPin.every(d => d !== '') && newPin.join('').length === 6) {
+      setPinLoading(true);
+      validateInvite(newPin.join(''));
+    }
+  }
+
+  function handlePinKeyDown(index, e) {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinRefs.current[index - 1]?.focus();
+    }
+  }
+
+  function handlePinPaste(e) {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      const newPin = pasted.split('');
+      setPin(newPin);
+      setPinLoading(true);
+      validateInvite(pasted);
     }
   }
 
@@ -94,6 +158,77 @@ export default function GuestJoin() {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (requiresPin) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-xl p-8 max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Film className="h-10 w-10 text-indigo-500" />
+              <h1 className="text-2xl text-white">Voterr</h1>
+            </div>
+            
+            {pinGroupInfo?.groupImageUrl ? (
+              <img 
+                src={pinGroupInfo.groupImageUrl} 
+                alt={pinGroupInfo.groupName}
+                className="w-20 h-20 rounded-xl object-cover mx-auto mb-4"
+              />
+            ) : (
+              <div className="w-20 h-20 bg-indigo-600/20 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <Lock className="h-8 w-8 text-indigo-500" />
+              </div>
+            )}
+            
+            <h2 className="text-lg text-white mb-2">{pinGroupInfo?.groupName}</h2>
+            <p className="text-gray-400 text-sm">Enter the 6-digit PIN to continue</p>
+          </div>
+
+          <div className="flex justify-center gap-2 mb-6" onPaste={handlePinPaste}>
+            {pin.map((digit, index) => (
+              <input
+                key={index}
+                ref={el => pinRefs.current[index] = el}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={e => handlePinChange(index, e.target.value)}
+                onKeyDown={e => handlePinKeyDown(index, e)}
+                disabled={pinLoading}
+                className={`w-12 h-14 text-center text-2xl bg-gray-700 border-2 rounded-lg text-white focus:outline-none focus:border-indigo-500 transition-colors ${
+                  pinError ? 'border-red-500' : 'border-gray-600'
+                } ${pinLoading ? 'opacity-50' : ''}`}
+                autoFocus={index === 0}
+              />
+            ))}
+          </div>
+
+          {pinError && (
+            <p className="text-red-400 text-sm text-center mb-4">{pinError}</p>
+          )}
+
+          {!pinError && !pinLoading && pin.some(d => d !== '') && pin.some(d => d === '') && (
+            <p className="text-gray-500 text-sm text-center mb-4">
+              {6 - pin.filter(d => d !== '').length} more digits needed
+            </p>
+          )}
+
+          {pinLoading && (
+            <div className="flex items-center justify-center gap-2 text-gray-400">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent" />
+              <span className="text-sm">Verifying...</span>
+            </div>
+          )}
+
+          <p className="text-gray-500 text-xs text-center mt-6">
+            Ask the group admin for the PIN code
+          </p>
+        </div>
       </div>
     );
   }
