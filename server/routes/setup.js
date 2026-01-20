@@ -18,6 +18,10 @@ router.get('/status', (req, res) => {
 });
 
 router.post('/plex-auth', async (req, res) => {
+  if (isSetupComplete()) {
+    return res.status(403).json({ error: 'Setup already complete' });
+  }
+  
   try {
     const response = await fetch('https://plex.tv/api/v2/pins', {
       method: 'POST',
@@ -57,6 +61,10 @@ router.post('/plex-auth', async (req, res) => {
 });
 
 router.get('/plex-auth/check', async (req, res) => {
+  if (isSetupComplete()) {
+    return res.status(403).json({ error: 'Setup already complete' });
+  }
+  
   try {
     const pinId = req.session.setupPlexPinId;
     
@@ -106,6 +114,10 @@ router.get('/plex-auth/check', async (req, res) => {
 });
 
 router.post('/complete', async (req, res) => {
+  if (isSetupComplete()) {
+    return res.status(403).json({ error: 'Setup already complete' });
+  }
+  
   try {
     const { overseerrUrl, overseerrApiKey, tautulliUrl, tautulliApiKey } = req.body;
     const plexToken = req.session.setupPlexToken;

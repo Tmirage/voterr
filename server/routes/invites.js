@@ -226,7 +226,7 @@ router.get('/validate/:token', rateLimit, (req, res) => {
   });
 });
 
-router.post('/local-join', (req, res) => {
+router.post('/local-join', rateLimit, (req, res) => {
   const { token, userId } = req.body;
 
   if (!token || !userId) {
