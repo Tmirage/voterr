@@ -12,13 +12,18 @@ function createImage(url) {
   });
 }
 
-async function getCroppedImg(imageSrc, pixelCrop) {
+async function getCroppedImg(imageSrc, pixelCrop, maxSize = 800) {
   const image = await createImage(imageSrc);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+  // Scale down if crop area is larger than maxSize
+  const scale = Math.min(1, maxSize / Math.max(pixelCrop.width, pixelCrop.height));
+  const outputWidth = Math.round(pixelCrop.width * scale);
+  const outputHeight = Math.round(pixelCrop.height * scale);
+
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
 
   ctx.drawImage(
     image,
@@ -28,14 +33,14 @@ async function getCroppedImg(imageSrc, pixelCrop) {
     pixelCrop.height,
     0,
     0,
-    pixelCrop.width,
-    pixelCrop.height
+    outputWidth,
+    outputHeight
   );
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {
       resolve(blob);
-    }, 'image/jpeg', 0.9);
+    }, 'image/jpeg', 0.85);
   });
 }
 

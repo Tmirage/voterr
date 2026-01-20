@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { serveImage, getCacheStats, clearCache } from '../services/imageCache.js';
-import { requireNonGuestOrInvite, requireNonGuest, requireAdmin } from '../middleware/auth.js';
+import { requireNonGuest, requireAdmin } from '../middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,7 +54,7 @@ router.post('/upload', requireNonGuest, upload.single('image'), (req, res) => {
   res.json({ url });
 });
 
-router.get('/uploads/:filename', requireNonGuestOrInvite, (req, res) => {
+router.get('/uploads/:filename', (req, res) => {
   const { filename } = req.params;
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '');
   const filePath = join(uploadsDir, safeName);

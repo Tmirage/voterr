@@ -151,16 +151,16 @@ export default function NominateModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
       onClick={onClose}
     >
       <div 
-        className="bg-gray-800 rounded-xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+        className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] my-auto overflow-hidden flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-          <h2 className="text-xl text-white">Nominate a Movie</h2>
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-700 flex items-center justify-between">
+          <h2 className="text-lg sm:text-xl text-white">Nominate a Movie</h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('grid')}
@@ -189,7 +189,7 @@ export default function NominateModal({
           </div>
         </div>
 
-        <div className="p-4 border-b border-gray-700 space-y-3">
+        <div className="p-3 sm:p-4 border-b border-gray-700 space-y-2 sm:space-y-3">
           {tmdbError && (
             <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-400 text-sm">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -251,7 +251,7 @@ export default function NominateModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
           {loadingLibrary || searching ? (
             <div className="flex items-center justify-center h-full min-h-[300px]">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
@@ -279,7 +279,7 @@ export default function NominateModal({
               )}
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {movies.map((movie) => {
                 const alreadyNominated = existingNominations.some(n => 
                   (movie.ratingKey && n.ratingKey === movie.ratingKey) || 

@@ -20,11 +20,12 @@ import schedulesRoutes from './routes/schedules.js';
 import moviesRoutes from './routes/movies.js';
 import votesRoutes from './routes/votes.js';
 import invitesRoutes from './routes/invites.js';
-import setupRoutes from './routes/setup.js';
+import setupRoutesHandler from './routes/setup.js';
 import settingsRoutes from './routes/settings.js';
 import imagesRoutes from './routes/images.js';
 import dashboardRoutes from './routes/dashboard.js';
 import { generateCsrfToken, csrfProtection } from './middleware/csrf.js';
+import SqliteStore from 'better-sqlite3-session-store';
 
 dotenv.config();
 
@@ -70,34 +71,45 @@ function getSessionSecret() {
   return secret;
 }
 
-app.use(session({
-  secret: getSessionSecret(),
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: 'auto',
-    httpOnly: true,
-    maxAge: 30 * 24 * 60 * 60 * 1000
-  }
-}));
+function setupRoutes() {
+  const SessionStore = SqliteStore(session);
+  
+  app.use(session({
+    store: new SessionStore({
+      client: db,
+      expired: {
+        clear: true,
+        intervalMs: 900000 // 15 min cleanup
+      }
+    }),
+    secret: getSessionSecret(),
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: 'auto',
+      httpOnly: true,
+      maxAge: 30 * 24 * 60 * 60 * 1000
+    }
+  }));
 
-app.get('/api/csrf-token', (req, res) => {
-  res.json({ token: generateCsrfToken(req) });
-});
+  app.get('/api/csrf-token', (req, res) => {
+    res.json({ token: generateCsrfToken(req) });
+  });
 
-app.use('/api', csrfProtection);
+  app.use('/api', csrfProtection);
 
-app.use('/api/setup', setupRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/groups', groupsRoutes);
-app.use('/api/schedules', schedulesRoutes);
-app.use('/api/movies', moviesRoutes);
-app.use('/api/votes', votesRoutes);
-app.use('/api/invites', invitesRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/images', imagesRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/setup', setupRoutesHandler);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/users', usersRoutes);
+  app.use('/api/groups', groupsRoutes);
+  app.use('/api/schedules', schedulesRoutes);
+  app.use('/api/movies', moviesRoutes);
+  app.use('/api/votes', votesRoutes);
+  app.use('/api/invites', invitesRoutes);
+  app.use('/api/settings', settingsRoutes);
+  app.use('/api/images', imagesRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: pkg.version, timestamp: new Date().toISOString() });
@@ -184,15 +196,18 @@ app.get('/join/:token', (req, res) => {
 </html>`);
 });
 
-if (hasBuiltClient) {
-  app.get('*', (req, res) => {
-    res.sendFile(join(clientDist, 'index.html'));
-  });
-}
-
 async function start() {
   try {
     await initDatabase();
+    setupRoutes();
+    
+    // Wildcard route MUST be registered AFTER API routes
+    if (hasBuiltClient) {
+      app.get('/{*path}', (req, res) => {
+        res.sendFile(join(clientDist, 'index.html'));
+      });
+    }
+    
     initScheduler();
     
     app.listen(PORT, () => {
