@@ -1,59 +1,42 @@
 import { getSetting } from './settings.js';
-import { getProxiedImageUrl } from './imageCache.js';
+import { CircuitBreaker } from '../utils/circuitBreaker.js';
 
 const TIMEOUT_MS = 5000;
-const CIRCUIT_BREAKER_DURATION = 5 * 60 * 1000;
-let lastFailure = null;
-let lastFailureTime = 0;
-let circuitOpen = false;
-let circuitOpenUntil = 0;
+const breaker = new CircuitBreaker('overseerr');
 
 export function getOverseerrStatus() {
-  const url = getSetting('overseerr_url');
-  const apiKey = getSetting('overseerr_api_key');
-  const configured = !!(url && apiKey);
-  if (!configured) return { configured: false };
-  
-  const now = Date.now();
-  if (circuitOpen && now < circuitOpenUntil) {
-    const remainingMs = circuitOpenUntil - now;
-    const remainingMin = Math.ceil(remainingMs / 60000);
-    return { 
-      configured: true, 
-      failed: true, 
-      error: lastFailure,
-      circuitOpen: true,
-      remainingMinutes: remainingMin
-    };
-  }
-  
-  if (circuitOpen && now >= circuitOpenUntil) {
-    circuitOpen = false;
-  }
-  
-  if (lastFailure && (now - lastFailureTime) < 60000) {
-    return { configured: true, failed: true, error: lastFailure };
-  }
-  return { configured: true, failed: false };
+  const { configured } = getOverseerrConfig();
+  return breaker.getStatus(configured);
 }
 
-export function retryOverseerr() {
-  circuitOpen = false;
-  circuitOpenUntil = 0;
-  lastFailure = null;
-  lastFailureTime = 0;
-}
-
-function isCircuitOpen() {
-  if (!circuitOpen) return false;
-  if (Date.now() >= circuitOpenUntil) {
-    circuitOpen = false;
-    return false;
+export async function retryOverseerr() {
+  breaker.reset();
+  
+  // Actually test the connection
+  const { url, apiKey, configured } = getOverseerrConfig();
+  if (!configured) {
+    return { success: false, error: 'Not configured' };
   }
-  return true;
+  
+  try {
+    const response = await fetchWithTimeout(`${url}/api/v1/status`, {
+      headers: { 'X-Api-Key': apiKey }
+    });
+    
+    if (!response.ok) {
+      breaker.recordFailure(`HTTP ${response.status}`);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    breaker.recordSuccess();
+    return { success: true };
+  } catch (error) {
+    breaker.recordFailure(error.message);
+    return { success: false, error: error.message };
+  }
 }
 
-export async function getOverseerrConfig() {
+export function getOverseerrConfig() {
   const url = getSetting('overseerr_url');
   const apiKey = getSetting('overseerr_api_key');
   return { url, apiKey, configured: !!(url && apiKey) };
@@ -74,11 +57,11 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 export async function searchOverseerrMovies(query) {
-  if (isCircuitOpen()) {
+  if (breaker.isOpen()) {
     return [];
   }
 
-  const { url, apiKey, configured } = await getOverseerrConfig();
+  const { url, apiKey, configured } = getOverseerrConfig();
   if (!configured) return [];
 
   try {
@@ -88,23 +71,16 @@ export async function searchOverseerrMovies(query) {
     );
 
     if (!response) {
-      lastFailure = 'Connection timed out';
-      lastFailureTime = Date.now();
-      circuitOpen = true;
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+      breaker.recordFailure('Connection timed out');
       return [];
     }
     if (!response.ok) {
-      lastFailure = `HTTP ${response.status}`;
-      lastFailureTime = Date.now();
-      circuitOpen = true;
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+      breaker.recordFailure(`HTTP ${response.status}`);
       return [];
     }
 
     const data = await response.json();
-    lastFailure = null;
-    lastFailureTime = 0;
+    breaker.recordSuccess();
     
     return data.results
       .filter(item => item.mediaType === 'movie')
@@ -112,25 +88,23 @@ export async function searchOverseerrMovies(query) {
         tmdbId: movie.id,
         title: movie.title || movie.originalTitle,
         year: movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null,
-        posterUrl: movie.posterPath ? getProxiedImageUrl(`https://image.tmdb.org/t/p/w500${movie.posterPath}`) : null,
+        posterUrl: movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : null,
         overview: movie.overview,
-        mediaType: 'overseerr'
+        mediaType: 'overseerr',
+        voteAverage: movie.voteAverage || null
       }));
   } catch (error) {
-    lastFailure = error.message;
-    lastFailureTime = Date.now();
-    circuitOpen = true;
-    circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+    breaker.recordFailure(error.message);
     return [];
   }
 }
 
 export async function getOverseerrTrending() {
-  if (isCircuitOpen()) {
+  if (breaker.isOpen()) {
     return [];
   }
 
-  const { url, apiKey, configured } = await getOverseerrConfig();
+  const { url, apiKey, configured } = getOverseerrConfig();
   if (!configured) return [];
 
   try {
@@ -140,38 +114,102 @@ export async function getOverseerrTrending() {
     );
 
     if (!response) {
-      lastFailure = 'Connection timed out';
-      lastFailureTime = Date.now();
-      circuitOpen = true;
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+      breaker.recordFailure('Connection timed out');
       return [];
     }
     if (!response.ok) {
-      lastFailure = `HTTP ${response.status}`;
-      lastFailureTime = Date.now();
-      circuitOpen = true;
-      circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+      breaker.recordFailure(`HTTP ${response.status}`);
       return [];
     }
 
     const data = await response.json();
-    lastFailure = null;
-    lastFailureTime = 0;
+    breaker.recordSuccess();
     
     return data.results.map(movie => ({
       tmdbId: movie.id,
       title: movie.title || movie.originalTitle,
       year: movie.releaseDate ? new Date(movie.releaseDate).getFullYear() : null,
-      posterUrl: movie.posterPath ? getProxiedImageUrl(`https://image.tmdb.org/t/p/w500${movie.posterPath}`) : null,
+      posterUrl: movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : null,
       overview: movie.overview,
-      mediaType: 'overseerr'
+      mediaType: 'overseerr',
+      voteAverage: movie.voteAverage || null
     }));
   } catch (error) {
-    lastFailure = error.message;
-    lastFailureTime = Date.now();
-    circuitOpen = true;
-    circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+    breaker.recordFailure(error.message);
     return [];
+  }
+}
+
+export async function getOverseerrMovieByTmdbId(tmdbId) {
+  if (breaker.isOpen()) {
+    return null;
+  }
+
+  const { url, apiKey, configured } = getOverseerrConfig();
+  if (!configured) return null;
+
+  try {
+    const response = await fetchWithTimeout(
+      `${url}/api/v1/movie/${tmdbId}`,
+      { headers: { 'X-Api-Key': apiKey } }
+    );
+
+    if (!response || !response.ok) {
+      return null;
+    }
+
+    const movie = await response.json();
+    breaker.recordSuccess();
+    
+    return {
+      tmdbId: movie.id,
+      title: movie.title,
+      voteAverage: movie.voteAverage || null,
+      runtime: movie.runtime || null
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function searchOverseerrMovieRating(title, year) {
+  if (breaker.isOpen()) {
+    return null;
+  }
+
+  const { url, apiKey, configured } = getOverseerrConfig();
+  if (!configured) return null;
+
+  try {
+    const response = await fetchWithTimeout(
+      `${url}/api/v1/search?query=${encodeURIComponent(title)}&page=1&language=en`,
+      { headers: { 'X-Api-Key': apiKey } }
+    );
+
+    if (!response || !response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    breaker.recordSuccess();
+    
+    const movie = data.results.find(item => {
+      if (item.mediaType !== 'movie') return false;
+      if (year) {
+        const movieYear = item.releaseDate ? new Date(item.releaseDate).getFullYear() : null;
+        return movieYear === parseInt(year);
+      }
+      return true;
+    });
+
+    if (!movie) return null;
+
+    return {
+      tmdbId: movie.id,
+      voteAverage: movie.voteAverage || null
+    };
+  } catch (error) {
+    return null;
   }
 }
 

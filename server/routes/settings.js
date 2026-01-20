@@ -1,13 +1,14 @@
 import { Router } from 'express';
-import { requireNonGuest } from '../middleware/auth.js';
-import { getSetting, setSettings } from '../services/settings.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
+import { getSetting, setSettings, getPlexToken } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
-import { retryTautulli } from '../services/tautulli.js';
-import { retryOverseerr } from '../services/overseerr.js';
+import { retryTautulli, getTautulliStatus } from '../services/tautulli.js';
+import { retryOverseerr, getOverseerrStatus } from '../services/overseerr.js';
+import { clearPlexCache, getPlexServerAndLibrary } from './movies.js';
 
 const router = Router();
 
-router.get('/', requireNonGuest, (req, res) => {
+router.get('/', requireAdmin, (req, res) => {
   res.json({
     overseerrUrl: getSetting('overseerr_url') || '',
     overseerrApiKey: getSetting('overseerr_api_key') || '',
@@ -18,7 +19,7 @@ router.get('/', requireNonGuest, (req, res) => {
   });
 });
 
-router.post('/', requireNonGuest, (req, res) => {
+router.post('/', requireAdmin, (req, res) => {
   const { overseerrUrl, overseerrApiKey, tautulliUrl, tautulliApiKey, tmdbApiKey, cachePlexImages } = req.body;
 
   const settings = {};
@@ -33,7 +34,7 @@ router.post('/', requireNonGuest, (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/test/overseerr', requireNonGuest, async (req, res) => {
+router.post('/test/overseerr', requireAdmin, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
@@ -56,7 +57,7 @@ router.post('/test/overseerr', requireNonGuest, async (req, res) => {
   }
 });
 
-router.post('/test/tautulli', requireNonGuest, async (req, res) => {
+router.post('/test/tautulli', requireAdmin, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
@@ -76,16 +77,16 @@ router.post('/test/tautulli', requireNonGuest, async (req, res) => {
   }
 });
 
-router.get('/cache/stats', requireNonGuest, (req, res) => {
+router.get('/cache/stats', requireAdmin, (req, res) => {
   res.json(getCacheStats());
 });
 
-router.delete('/cache/clear', requireNonGuest, (req, res) => {
+router.delete('/cache/clear', requireAdmin, (req, res) => {
   const deleted = clearCache();
   res.json({ deleted });
 });
 
-router.post('/test/tmdb', requireNonGuest, async (req, res) => {
+router.post('/test/tmdb', requireAdmin, async (req, res) => {
   const { apiKey } = req.body;
 
   if (!apiKey) {
@@ -105,14 +106,68 @@ router.post('/test/tmdb', requireNonGuest, async (req, res) => {
   }
 });
 
-router.post('/retry/tautulli', requireNonGuest, (req, res) => {
+router.post('/retry/tautulli', requireAdmin, async (req, res) => {
+  const result = await retryTautulli();
+  res.json(result);
+});
+
+router.post('/retry/overseerr', requireAdmin, async (req, res) => {
+  const result = await retryOverseerr();
+  res.json(result);
+});
+
+// Service status endpoint for sidebar - available to all authenticated users
+router.get('/services/status', requireAuth, (req, res) => {
+  res.json({
+    overseerr: getOverseerrStatus(),
+    tautulli: getTautulliStatus()
+  });
+});
+
+// Reset settings endpoints
+router.post('/reset/overseerr', requireAdmin, (req, res) => {
+  setSettings({
+    overseerr_url: null,
+    overseerr_api_key: null
+  });
+  retryOverseerr();
+  res.json({ success: true });
+});
+
+router.post('/reset/tautulli', requireAdmin, (req, res) => {
+  setSettings({
+    tautulli_url: null,
+    tautulli_api_key: null
+  });
   retryTautulli();
   res.json({ success: true });
 });
 
-router.post('/retry/overseerr', requireNonGuest, (req, res) => {
-  retryOverseerr();
+router.post('/plex/clear-cache', requireAdmin, (req, res) => {
+  clearPlexCache();
   res.json({ success: true });
+});
+
+router.get('/plex/info', requireAdmin, async (req, res) => {
+  try {
+    const plexToken = getPlexToken();
+    
+    if (!plexToken) {
+      return res.json({ configured: false });
+    }
+
+    const { serverUrl, libraryKey, serverId } = await getPlexServerAndLibrary(plexToken);
+    
+    res.json({
+      configured: true,
+      serverUrl,
+      libraryId: libraryKey,
+      serverId
+    });
+  } catch (error) {
+    console.error('Failed to get Plex info:', error);
+    res.json({ configured: false, error: error.message });
+  }
 });
 
 export default router;

@@ -1,6 +1,6 @@
 services:
   voterr:
-    image: ghcr.io/tmirage/voters:latest
+    image: ghcr.io/tmirage/voterr:latest
     container_name: voterr
     restart: unless-stopped
     ports:

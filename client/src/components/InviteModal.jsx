@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, RefreshCw, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 
-export default function InviteModal({ inviteUrl, onClose }) {
+export default function InviteModal({ inviteUrl, inviteId, onClose, onRefresh }) {
   const [copied, setCopied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -14,6 +16,17 @@ export default function InviteModal({ inviteUrl, onClose }) {
     navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleRefresh() {
+    if (!onRefresh || !inviteId) return;
+    setRefreshing(true);
+    try {
+      await onRefresh(inviteId);
+      setShowConfirm(false);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -49,9 +62,51 @@ export default function InviteModal({ inviteUrl, onClose }) {
             )}
           </button>
         </div>
+        {onRefresh && inviteId && !showConfirm && (
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="mt-3 w-full px-4 py-2 text-sm text-gray-500 hover:text-gray-400 transition-colors flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Regenerate link
+          </button>
+        )}
+        {showConfirm && (
+          <div className="mt-3 p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+            <div className="flex items-start gap-2 mb-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-200">
+                This will invalidate the current link. Anyone with the old link will no longer be able to join.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={refreshing}
+                className="flex-1 px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex-1 px-3 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {refreshing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Regenerating...
+                  </>
+                ) : (
+                  'Confirm'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
         <button
           onClick={onClose}
-          className="mt-4 w-full px-4 py-2 text-gray-400 hover:text-white transition-colors"
+          className="mt-2 w-full px-4 py-2 text-gray-400 hover:text-white transition-colors"
         >
           Close
         </button>

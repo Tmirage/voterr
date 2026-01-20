@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Film, Calendar, Clock, Users, Trophy } from 'lucide-react';
+import { Film, Calendar, Clock, Users, Trophy, XCircle } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { format, parseISO } from 'date-fns';
 
 export default function GuestJoin() {
@@ -92,20 +93,30 @@ export default function GuestJoin() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (error) {
+    const errorMessages = {
+      'Invalid invite link': 'This invite link is no longer valid. It may have been regenerated or deleted.',
+      'Invite link has expired': 'This invite link has expired. Please ask for a new link.',
+      'This movie night has already passed': 'This movie night has already taken place.',
+      'Voting is closed for this movie night': 'Voting has ended for this movie night.',
+      'Sharing is disabled for this group': 'Sharing has been disabled for this group.',
+    };
+    
+    const friendlyMessage = errorMessages[error] || 'This invite link is not valid. Please check the link or ask for a new one.';
+    
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 rounded-xl p-8 max-w-md text-center">
           <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-red-600/20 flex items-center justify-center">
-            <Film className="h-8 w-8 text-red-500" />
+            <XCircle className="h-8 w-8 text-red-500" />
           </div>
-          <h1 className="text-xl text-white mb-2">Invalid Invite</h1>
-          <p className="text-gray-400">{error}</p>
+          <h1 className="text-xl text-white mb-2">Link Not Valid</h1>
+          <p className="text-gray-400">{friendlyMessage}</p>
         </div>
       </div>
     );
@@ -152,7 +163,16 @@ export default function GuestJoin() {
           </div>
         </div>
 
-        {invite.topNominations && invite.topNominations.length > 0 && (
+        {invite.isCancelled ? (
+          <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-6 mb-6 text-center">
+            <XCircle className="h-12 w-12 mx-auto mb-3 text-red-500" />
+            <h2 className="text-lg text-red-400 mb-1">Movie Night Cancelled</h2>
+            <p className="text-gray-400 text-sm">This movie night has been cancelled.</p>
+            {invite.cancelReason && (
+              <p className="mt-2 text-gray-500 italic">"{invite.cancelReason}"</p>
+            )}
+          </div>
+        ) : invite.topNominations && invite.topNominations.length > 0 && (
           <div className="bg-gray-700 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Trophy className="h-4 w-4 text-yellow-500" />
@@ -228,13 +248,13 @@ export default function GuestJoin() {
                       </div>
                     )}
                     <span className="flex-1 text-left">{user.username}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    <div className={`text-xs px-2.5 py-1 rounded-full ${
                       user.votesRemaining === 0 
-                        ? 'bg-gray-600 text-gray-400' 
+                        ? 'bg-red-500/20 text-red-400' 
                         : 'bg-indigo-500/20 text-indigo-300'
                     }`}>
-                      {user.votesRemaining}/{invite.maxVotesPerUser || 3} votes
-                    </span>
+                      {user.votesRemaining} of {invite.maxVotesPerUser} votes left
+                    </div>
                   </button>
                 ))}
               </div>

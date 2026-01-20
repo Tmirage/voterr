@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
+import { isMovieNightArchived, getUpcomingSqlCondition } from '../utils/movieNight.js';
+import { isGroupMember, isGroupAdmin } from '../utils/permissions.js';
 
 const router = Router();
 
 router.get('/', requireNonGuest, (req, res) => {
+  const isAppAdmin = req.session.isAppAdmin;
+  
   const groups = db.prepare(`
     SELECT g.*, 
            COUNT(DISTINCT gm.user_id) as member_count,
@@ -12,28 +16,26 @@ router.get('/', requireNonGuest, (req, res) => {
     FROM groups g
     LEFT JOIN group_members gm ON g.id = gm.group_id
     LEFT JOIN users u ON g.created_by = u.id
-    WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+    ${isAppAdmin ? '' : 'WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ?)'}
     GROUP BY g.id
     ORDER BY g.name
-  `).all(req.session.userId);
+  `).all(...(isAppAdmin ? [] : [req.session.userId]));
 
-  const today = new Date().toISOString().split('T')[0];
-  
   const result = groups.map(g => {
     const upcomingNight = db.prepare(`
       SELECT id, date, time, status
-      FROM movie_nights
-      WHERE group_id = ? AND date >= ? AND is_cancelled = 0
-      ORDER BY date ASC
+      FROM movie_nights mn
+      WHERE mn.group_id = ? AND mn.is_cancelled = 0 AND ${getUpcomingSqlCondition('mn')}
+      ORDER BY mn.date ASC
       LIMIT 1
-    `).get(g.id, today);
+    `).get(g.id);
 
     return {
       id: g.id,
       name: g.name,
       description: g.description,
       imageUrl: g.image_url,
-      maxVotesPerUser: g.max_votes_per_user || 3,
+      maxVotesPerUser: g.max_votes_per_user,
       memberCount: g.member_count,
       createdBy: g.created_by_name,
       createdAt: g.created_at,
@@ -57,11 +59,7 @@ router.get('/:id', requireNonGuest, (req, res) => {
     return res.status(404).json({ error: 'Group not found' });
   }
 
-  const isMember = db.prepare(
-    'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?'
-  ).get(id, req.session.userId);
-
-  if (!isMember) {
+  if (!req.session.isAppAdmin && !isGroupMember(req.session, id)) {
     return res.status(403).json({ error: 'Not a member of this group' });
   }
 
@@ -78,7 +76,8 @@ router.get('/:id', requireNonGuest, (req, res) => {
     name: group.name,
     description: group.description,
     imageUrl: group.image_url,
-    maxVotesPerUser: group.max_votes_per_user || 3,
+    maxVotesPerUser: group.max_votes_per_user,
+    sharingEnabled: group.sharing_enabled !== 0,
     createdAt: group.created_at,
     members: members.map(m => ({
       id: m.id,
@@ -127,11 +126,7 @@ router.post('/:id/members', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'userIds array is required' });
   }
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(id, req.session.userId);
-
-  if (!isAdmin) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can add members' });
   }
 
@@ -150,13 +145,9 @@ router.post('/:id/members', requireNonGuest, (req, res) => {
 router.delete('/:id/members/:userId', requireNonGuest, (req, res) => {
   const { id, userId } = req.params;
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(id, req.session.userId);
-
   const isSelf = parseInt(userId) === req.session.userId;
 
-  if (!isAdmin && !isSelf) {
+  if (!isGroupAdmin(req.session, id) && !isSelf) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
@@ -166,13 +157,9 @@ router.delete('/:id/members/:userId', requireNonGuest, (req, res) => {
 
 router.patch('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
-  const { name, description, imageUrl, maxVotesPerUser } = req.body;
+  const { name, description, imageUrl, maxVotesPerUser, sharingEnabled } = req.body;
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(id, req.session.userId);
-
-  if (!isAdmin) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can update the group' });
   }
 
@@ -184,10 +171,15 @@ router.patch('/:id', requireNonGuest, (req, res) => {
     return res.status(400).json({ error: 'Name must be 35 characters or less' });
   }
 
-  const votes = maxVotesPerUser !== undefined ? Math.max(1, Math.min(10, parseInt(maxVotesPerUser) || 3)) : null;
+  const votes = maxVotesPerUser !== undefined ? Math.max(1, Math.min(10, parseInt(maxVotesPerUser))) : null;
+  const sharing = sharingEnabled !== undefined ? (sharingEnabled ? 1 : 0) : null;
   
-  if (votes !== null) {
+  if (votes !== null && sharing !== null) {
+    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, sharing, id);
+  } else if (votes !== null) {
     db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, id);
+  } else if (sharing !== null) {
+    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, sharing, id);
   } else {
     db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, id);
   }
@@ -197,11 +189,7 @@ router.patch('/:id', requireNonGuest, (req, res) => {
 router.delete('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
 
-  const isAdmin = db.prepare(
-    "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ? AND role = 'admin'"
-  ).get(id, req.session.userId);
-
-  if (!isAdmin) {
+  if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can delete the group' });
   }
 
@@ -213,7 +201,7 @@ router.delete('/:id', requireNonGuest, (req, res) => {
       const placeholders = movieNightIds.map(() => '?').join(',');
       db.prepare(`DELETE FROM votes WHERE nomination_id IN (SELECT id FROM nominations WHERE movie_night_id IN (${placeholders}))`).run(...movieNightIds);
       db.prepare(`DELETE FROM nominations WHERE movie_night_id IN (${placeholders})`).run(...movieNightIds);
-      db.prepare(`DELETE FROM movie_night_attendance WHERE movie_night_id IN (${placeholders})`).run(...movieNightIds);
+      db.prepare(`DELETE FROM attendance WHERE movie_night_id IN (${placeholders})`).run(...movieNightIds);
       db.prepare(`DELETE FROM guest_invites WHERE movie_night_id IN (${placeholders})`).run(...movieNightIds);
       db.prepare(`DELETE FROM movie_nights WHERE group_id = ?`).run(id);
     }

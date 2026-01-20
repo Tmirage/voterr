@@ -169,15 +169,23 @@ voterr/
 |----------|-------------|---------|
 | `PORT` | Server port | `5056` |
 | `DATABASE_PATH` | SQLite database path | `./data/voterr.db` |
-| `SESSION_SECRET` | Session encryption key | Required |
+| `SESSION_SECRET` | Session encryption key | Required in production |
+| `NODE_ENV` | Environment (development/production) | `development` |
 | `PLEX_URL` | Plex server URL | Required |
 | `PLEX_TOKEN` | Plex authentication token | Required |
 | `PLEX_CLIENT_ID` | Plex OAuth client ID | `voterr` |
 | `TAUTULLI_URL` | Tautulli server URL | Optional |
 | `TAUTULLI_API_KEY` | Tautulli API key | Optional |
-| `RADARR_URL` | Radarr server URL | Required |
-| `RADARR_API_KEY` | Radarr API key | Required |
+| `OVERSEERR_URL` | Overseerr server URL | Optional |
+| `OVERSEERR_API_KEY` | Overseerr API key | Optional |
+| `TMDB_API_KEY` | TMDB API key for movie search | Optional |
 | `TZ` | Timezone | `Europe/Amsterdam` |
+
+## Security Notes
+
+- `SESSION_SECRET` is required in production mode. The application will exit with an error if not set when `NODE_ENV=production`.
+- Cookies are automatically set to `secure: true` in production mode, requiring HTTPS.
+- Admin status changes for users take effect on their next login (session is not immediately updated).
 
 ## Docker Installation
 
@@ -193,7 +201,7 @@ docker run -d \
   -e RADARR_URL=http://your-radarr:7878 \
   -e RADARR_API_KEY=your-key \
   -e SESSION_SECRET=your-secret \
-  ghcr.io/tmirage/voters:latest
+  ghcr.io/tmirage/voterr:latest
 ```
 
 ### Docker Compose
@@ -201,7 +209,7 @@ docker run -d \
 ```yaml
 services:
   voterr:
-    image: ghcr.io/tmirage/voters:latest
+    image: ghcr.io/tmirage/voterr:latest
     container_name: voterr
     restart: unless-stopped
     ports:

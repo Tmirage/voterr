@@ -15,13 +15,15 @@ export default function AnimatedList({ children, className = '', as: Component =
       const key = item.dataset.key;
       if (!key) return;
       
-      const rect = item.getBoundingClientRect();
+      // Use offsetTop/offsetLeft relative to parent instead of viewport-relative getBoundingClientRect
+      const top = item.offsetTop;
+      const left = item.offsetLeft;
       const oldPos = positionsRef.current.get(key);
-      newPositions.set(key, { top: rect.top, left: rect.left });
+      newPositions.set(key, { top, left });
 
       if (oldPos) {
-        const deltaY = oldPos.top - rect.top;
-        const deltaX = oldPos.left - rect.left;
+        const deltaY = oldPos.top - top;
+        const deltaX = oldPos.left - left;
 
         if (Math.abs(deltaY) > 1 || Math.abs(deltaX) > 1) {
           item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;

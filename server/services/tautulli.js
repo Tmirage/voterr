@@ -1,53 +1,43 @@
 import { getSetting } from './settings.js';
+import { CircuitBreaker } from '../utils/circuitBreaker.js';
 
 const TIMEOUT_MS = 5000;
-const CIRCUIT_BREAKER_DURATION = 5 * 60 * 1000;
-let lastFailure = null;
-let lastFailureTime = 0;
-let circuitOpen = false;
-let circuitOpenUntil = 0;
+const breaker = new CircuitBreaker('tautulli');
 
 export function getTautulliStatus() {
   const { configured } = getTautulliConfig();
-  if (!configured) return { configured: false };
-  
-  const now = Date.now();
-  if (circuitOpen && now < circuitOpenUntil) {
-    const remainingMs = circuitOpenUntil - now;
-    const remainingMin = Math.ceil(remainingMs / 60000);
-    return { 
-      configured: true, 
-      failed: true, 
-      error: lastFailure,
-      circuitOpen: true,
-      remainingMinutes: remainingMin
-    };
-  }
-  
-  if (circuitOpen && now >= circuitOpenUntil) {
-    circuitOpen = false;
-  }
-  
-  if (lastFailure && (now - lastFailureTime) < 60000) {
-    return { configured: true, failed: true, error: lastFailure };
-  }
-  return { configured: true, failed: false };
+  return breaker.getStatus(configured);
 }
 
-export function retryTautulli() {
-  circuitOpen = false;
-  circuitOpenUntil = 0;
-  lastFailure = null;
-  lastFailureTime = 0;
-}
-
-function isCircuitOpen() {
-  if (!circuitOpen) return false;
-  if (Date.now() >= circuitOpenUntil) {
-    circuitOpen = false;
-    return false;
+export async function retryTautulli() {
+  breaker.reset();
+  
+  // Actually test the connection
+  const { url: tautulliUrl, apiKey, configured } = getTautulliConfig();
+  if (!configured) {
+    return { success: false, error: 'Not configured' };
   }
-  return true;
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    
+    const response = await fetch(`${tautulliUrl}/api/v2?apikey=${apiKey}&cmd=arnold`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      breaker.recordFailure(`HTTP ${response.status}`);
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    breaker.recordSuccess();
+    return { success: true };
+  } catch (error) {
+    breaker.recordFailure(error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 function getTautulliConfig() {
@@ -57,7 +47,7 @@ function getTautulliConfig() {
 }
 
 async function tautulliRequest(cmd, params = {}) {
-  if (isCircuitOpen()) {
+  if (breaker.isOpen()) {
     return null;
   }
 
@@ -83,28 +73,22 @@ async function tautulliRequest(cmd, params = {}) {
     clearTimeout(timeoutId);
     
     if (!response.ok) {
-      lastFailure = `HTTP ${response.status}`;
-      lastFailureTime = Date.now();
+      breaker.recordFailure(`HTTP ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     
     if (data.response?.result !== 'success') {
-      lastFailure = data.response?.message || 'Unknown error';
-      lastFailureTime = Date.now();
+      breaker.recordFailure(data.response?.message || 'Unknown error');
       return null;
     }
 
-    lastFailure = null;
-    lastFailureTime = 0;
+    breaker.recordSuccess();
     return data.response.data;
   } catch (error) {
     clearTimeout(timeoutId);
-    lastFailure = error.name === 'AbortError' ? 'Connection timed out' : error.message;
-    lastFailureTime = Date.now();
-    circuitOpen = true;
-    circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+    breaker.recordFailure(error.name === 'AbortError' ? 'Connection timed out' : error.message);
     return null;
   }
 }

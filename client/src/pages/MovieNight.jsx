@@ -19,7 +19,10 @@ import {
   Users,
   Crown,
   Lock,
-  Film
+  Film,
+  XCircle,
+  RotateCcw,
+  Play
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import clsx from 'clsx';
@@ -28,6 +31,10 @@ import NominateModal from '../components/NominateModal';
 import InviteModal from '../components/InviteModal';
 import ConfirmModal from '../components/ConfirmModal';
 import AnimatedList from '../components/AnimatedList';
+import LoadingSpinner from '../components/LoadingSpinner';
+import Tooltip from '../components/Tooltip';
+import MovieNightCountdown from '../components/MovieNightCountdown';
+import MemberStatusList from '../components/MemberStatusList';
 
 export default function MovieNight() {
   const { id } = useParams();
@@ -41,14 +48,24 @@ export default function MovieNight() {
   const [showInvite, setShowInvite] = useState(false);
   const [showHostPicker, setShowHostPicker] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteId, setInviteId] = useState(null);
+  const [votesData, setVotesData] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => {
     loadMovieNight();
-    return () => clearRankingCountdown();
+    
+    const interval = setInterval(() => {
+      loadMovieNight(true);
+    }, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      clearRankingCountdown();
+    };
   }, [id]);
 
-  async function loadMovieNight() {
+  async function loadMovieNight(isPolling = false) {
     try {
       const [nightData, votesData] = await Promise.all([
         api.get(`/schedules/movie-nights/${id}`),
@@ -56,7 +73,10 @@ export default function MovieNight() {
       ]);
       setNight(nightData);
       setNominations(votesData.nominations);
-      voting.initialize(votesData, nightData.winningMovieId);
+      setVotesData(votesData);
+      if (!isPolling) {
+        voting.initialize(votesData, nightData.winningMovieId);
+      }
     } catch (error) {
       console.error('Failed to load movie night:', error);
     } finally {
@@ -126,6 +146,24 @@ export default function MovieNight() {
     }
   }
 
+  async function handleCancel(reason) {
+    try {
+      await api.patch(`/schedules/movie-nights/${id}`, { isCancelled: true, cancelReason: reason || null });
+      setNight(prev => ({ ...prev, isCancelled: true, cancelReason: reason || null }));
+    } catch (error) {
+      console.error('Failed to cancel:', error);
+    }
+  }
+
+  async function handleUncancel() {
+    try {
+      await api.patch(`/schedules/movie-nights/${id}`, { isCancelled: false });
+      setNight(prev => ({ ...prev, isCancelled: false }));
+    } catch (error) {
+      console.error('Failed to uncancel:', error);
+    }
+  }
+
   async function handleDecide(nominationId = null) {
     try {
       await api.post(`/votes/movie-night/${id}/decide`, { nominationId });
@@ -148,19 +186,26 @@ export default function MovieNight() {
     try {
       const result = await api.post('/invites/create', { movieNightId: parseInt(id) });
       setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id || null);
       setShowInvite(true);
     } catch (error) {
       console.error('Failed to create invite:', error);
     }
   }
 
+  async function handleRefreshInvite(invId) {
+    try {
+      const result = await api.post(`/invites/refresh/${invId}`);
+      setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id);
+    } catch (error) {
+      console.error('Failed to refresh invite:', error);
+    }
+  }
+
   
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!night) {
@@ -171,15 +216,10 @@ export default function MovieNight() {
     );
   }
 
-  const isHost = night.hostId === user.id;
   const userAttendance = night.attendance?.find(a => a.userId === user.id);
   
-  const nightDateTime = new Date(`${night.date}T${night.time || '20:00'}`);
-  const isPast = nightDateTime < new Date();
-  
-  const canVote = night.status === 'voting' && !night.isCancelled && !isPast;
-  const canNominate = night.status === 'voting' && !night.isCancelled && !isPast;
-  const winner = nominations.find(n => n.id === night.winningMovieId);
+  const { isLocked, canVote, canNominate, winner } = votesData || {};
+  const isArchived = night.isArchived;
 
   
   return (
@@ -191,156 +231,166 @@ export default function MovieNight() {
           )}
           <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl text-white">
-                {night.scheduleName || 'Movie Night'}
-              </h1>
-              <div className="flex flex-wrap items-center gap-4 mt-2 text-gray-400">
-                <span className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  {format(parseISO(night.date), 'EEEE, MMMM d, yyyy')}
-                </span>
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  {night.time}
-                </span>
-                {night.groupName && (
-                  <span>{night.groupName}</span>
-                )}
-                {isPast && night.status === 'voting' && (
-                <span className="flex items-center gap-2 text-amber-500">
+              <MovieNightCountdown
+                title={night.scheduleName || 'Movie Night'}
+                date={night.date}
+                time={night.time}
+                hostName={night.hostName}
+                onHostClick={() => setShowHostPicker(true)}
+                canChangeHost={night.canChangeHost && !isLocked && !night.isCancelled}
+                groupName={night.groupName}
+                groupDescription={night.groupDescription}
+              />
+              {isArchived && !night.isCancelled && (
+                <div className="mt-2 flex items-center gap-2 text-gray-500 text-sm">
                   <Lock className="h-4 w-4" />
-                  Locked
-                </span>
-              )}
-              {night.hostName ? (
-                <button
-                  onClick={() => setShowHostPicker(true)}
-                  className="flex items-center gap-1 hover:text-indigo-400 transition-colors underline decoration-dotted underline-offset-2"
-                >
-                  <Crown className="h-4 w-4 text-purple-400" />
-                  {night.hostName}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowHostPicker(true)}
-                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors underline decoration-dotted underline-offset-2"
-                >
-                  <Crown className="h-4 w-4" />
-                  Set host
-                </button>
-              )}
-              </div>
-              {night.groupDescription && (
-                <p className="text-sm text-gray-500 mt-1">{night.groupDescription}</p>
+                  Archived
+                </div>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleSetAttendance('attending')}
-              className={clsx(
-                "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                userAttendance?.status === 'attending'
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              {!isLocked && (
+                <>
+                  <button
+                    onClick={() => handleSetAttendance('attending')}
+                    className={clsx(
+                      "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                      userAttendance?.status === 'attending'
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    )}
+                  >
+                    <UserCheck className="h-5 w-5" />
+                    Attending
+                  </button>
+                  <button
+                    onClick={() => handleSetAttendance('absent')}
+                    className={clsx(
+                      "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
+                      userAttendance?.status === 'absent'
+                        ? "bg-red-600 text-white"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    )}
+                  >
+                    <UserX className="h-5 w-5" />
+                    Absent
+                  </button>
+                </>
               )}
-            >
-              <UserCheck className="h-5 w-5" />
-              Attending
-            </button>
-            <button
-              onClick={() => handleSetAttendance('absent')}
-              className={clsx(
-                "flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm transition-colors active:scale-95",
-                userAttendance?.status === 'absent'
-                  ? "bg-red-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              {!user.isLocalInvite && night.sharingEnabled && (
+                <button
+                  onClick={handleCreateInvite}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
+                >
+                  <LinkIcon className="h-5 w-5" />
+                  Share
+                </button>
               )}
-            >
-              <UserX className="h-5 w-5" />
-              Absent
-            </button>
-            {!user.isLocalInvite && (
-              <button
-                onClick={handleCreateInvite}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
-              >
-                <LinkIcon className="h-5 w-5" />
-                Share
-              </button>
-            )}
             </div>
           </div>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-gray-700">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-400 flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Attendance ({night.attendance?.filter(a => a.status === 'attending').length || 0} attending)
-            </p>
-          </div>
-          {night.attendance && night.attendance.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {night.attendance.map((a) => (
-                <div
-                  key={a.userId}
-                  className={clsx(
-                    "flex items-center gap-2 px-2 py-1 rounded-full text-xs",
-                    a.status === 'attending' ? "bg-green-600/20 text-green-400" : "bg-red-600/20 text-red-400"
-                  )}
-                >
-                  {a.avatarUrl ? (
-                    <img src={a.avatarUrl} alt={a.username} className="h-4 w-4 rounded-full" />
-                  ) : (
-                    <div className="h-4 w-4 rounded-full bg-gray-600 flex items-center justify-center text-[10px]">
-                      {a.username?.[0]?.toUpperCase()}
-                    </div>
-                  )}
-                  <span>{a.username}</span>
-                  {a.status === 'attending' ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
-                </div>
-              ))}
+
+        {votesData?.memberVotingStatus && votesData.memberVotingStatus.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-gray-400 flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Member Status ({night.attendance?.filter(a => a.status === 'attending').length || 0} attending)
+              </p>
             </div>
-          )}
-        </div>
+            <MemberStatusList 
+              members={votesData.memberVotingStatus} 
+              attendance={night.attendance} 
+            />
+          </div>
+        )}
       </div>
 
-      {winner && (
-        <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-600/30 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Trophy className="h-6 w-6 text-yellow-500" />
-              <h2 className="text-lg text-white">Winner</h2>
-            </div>
-            {(isHost || user.isAdmin) && (
-              <button
-                onClick={handleUndecide}
-                className="text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                Undo winner
-              </button>
-            )}
-          </div>
+      {night.isCancelled && (
+        <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-8 text-center">
+          <XCircle className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <h2 className="text-xl text-red-400 mb-2">Movie Night Cancelled</h2>
+          <p className="text-gray-400">This movie night has been cancelled. Voting is disabled.</p>
+          {night.cancelReason && (
+            <p className="mt-2 text-gray-500 italic">"{night.cancelReason}"</p>
+          )}
+          {night.canManage && !isArchived && (
+            <button
+              onClick={() => setConfirmModal({
+                title: 'Restore Movie Night',
+                message: 'Are you sure you want to restore this movie night? Voting will be re-enabled.',
+                confirmText: 'Restore',
+                destructive: false,
+                onConfirm: async () => {
+                  await handleUncancel();
+                  setConfirmModal(null);
+                }
+              })}
+              className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm bg-green-600 hover:bg-green-700 text-white transition-colors"
+            >
+              <RotateCcw className="h-5 w-5" />
+              Restore Movie Night
+            </button>
+          )}
+        </div>
+      )}
+
+      {!night.isCancelled && winner && (
+        <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-600/30 rounded-xl p-6 relative">
+          {night.canManage && !isLocked && (
+            <button
+              onClick={handleUndecide}
+              className="absolute top-2 right-2 z-10 text-sm text-gray-400 hover:text-white px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              Undo winner
+            </button>
+          )}
           <div className="flex gap-4">
             {winner.posterUrl && (
               <img
                 src={winner.posterUrl}
                 alt={winner.title}
                 className="w-24 h-36 object-cover rounded-lg"
+                loading="lazy"
+                decoding="async"
               />
             )}
-            <div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Trophy className="h-5 w-5 text-yellow-500" />
+                <span className="text-sm text-yellow-400">Winner</span>
+              </div>
               <h3 className="text-xl text-white">{winner.title}</h3>
-              <p className="text-gray-400">{winner.year}</p>
+              <p className="text-gray-400">
+                {winner.year}
+                {winner.voteAverage && (
+                  <span className="ml-2 text-yellow-400">TMDB {winner.voteAverage.toFixed(1)}</span>
+                )}
+              </p>
               <p className="text-sm text-gray-400 mt-2">
                 {winner.voteCount} votes
               </p>
             </div>
           </div>
+          {winner.ratingKey && voting.plexServerId && !user.isLocal && !user.isLocalInvite && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <a
+                href={`https://app.plex.tv/desktop/#!/server/${voting.plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${winner.ratingKey}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pointer-events-auto flex items-center gap-3 px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white text-xl rounded-xl transition-colors shadow-xl"
+              >
+                <Play className="h-10 w-10" />
+                Watch on Plex
+              </a>
+            </div>
+          )}
         </div>
       )}
 
+      {!night.isCancelled && (
       <div className="bg-gray-800 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
           <h2 className="text-lg text-white">
@@ -392,6 +442,8 @@ export default function MovieNight() {
                         src={nomination.posterUrl}
                         alt={nomination.title}
                         className="w-28 sm:w-32 md:w-40 aspect-[2/3] object-cover rounded-xl shadow-lg"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-28 sm:w-32 md:w-40 aspect-[2/3] bg-gray-700 rounded-xl flex items-center justify-center">
@@ -415,10 +467,27 @@ export default function MovieNight() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="text-lg text-white">{nomination.title}</h3>
+                        {nomination.ratingKey && voting.plexServerId && !user.isLocal && !user.isLocalInvite ? (
+                          <Tooltip content="Open in Plex">
+                            <a
+                              href={`https://app.plex.tv/desktop/#!/server/${voting.plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${nomination.ratingKey}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-white hover:text-orange-500 transition-colors"
+                            >
+                              <Play className="h-4 w-4" />
+                              <h3 className="text-lg">{nomination.title}</h3>
+                            </a>
+                          </Tooltip>
+                        ) : (
+                          <h3 className="text-lg text-white">{nomination.title}</h3>
+                        )}
                         <p className="text-sm text-gray-400">
                           {nomination.year}
                           {nomination.runtime && ` • ${nomination.runtime} min`}
+                          {nomination.voteAverage && (
+                            <span className="ml-2 text-yellow-400">TMDB {nomination.voteAverage.toFixed(1)}</span>
+                          )}
                         </p>
                       </div>
                       {nomination.id === night.winningMovieId && (
@@ -431,14 +500,6 @@ export default function MovieNight() {
 
                     <p className="text-sm text-gray-500 mt-1">
                       Nominated by {nomination.nominatedBy.username}
-                      {nomination.nominatedBy.id === user.id && night.status === 'voting' && (
-                        <span
-                          onClick={() => handleUnnominate(nomination.id)}
-                          className="ml-2 text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                        >
-                          · Remove
-                        </span>
-                      )}
                     </p>
 
                     {nomination.overview && (
@@ -531,7 +592,7 @@ export default function MovieNight() {
                         </div>
                       )}
 
-                      {(isHost || user.isAdmin) && canNominate && !nomination.isBlocked && (
+                      {night.canManage && canNominate && !nomination.isBlocked && (
                         <button
                           onClick={() => handleDecide(nomination.id)}
                           className="h-11 flex items-center gap-2 px-4 bg-yellow-600/20 text-yellow-400 rounded-xl hover:bg-yellow-600/30 transition-colors text-sm active:scale-95"
@@ -603,7 +664,36 @@ export default function MovieNight() {
             </div>
           </div>
         )}
+
       </div>
+      )}
+
+      {night.canManage && !night.isCancelled && !isArchived && (
+        <div className="mt-6 p-4 bg-gray-800/50 rounded-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-400">Movie Night Status</p>
+            <p className="text-white">This movie night is active</p>
+          </div>
+          <button
+            onClick={() => setConfirmModal({
+              title: 'Cancel Movie Night',
+              message: 'Are you sure you want to cancel this movie night? Voting will be disabled.',
+              confirmText: 'Cancel Movie Night',
+              destructive: true,
+              inputLabel: 'Reason (optional)',
+              inputPlaceholder: 'e.g. Not enough people available',
+              onConfirm: async (reason) => {
+                await handleCancel(reason);
+                setConfirmModal(null);
+              }
+            })}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
+          >
+            <XCircle className="h-4 w-4" />
+            Cancel
+          </button>
+        </div>
+      )}
 
       {showNominate && (
         <NominateModal
@@ -617,7 +707,9 @@ export default function MovieNight() {
       {showInvite && (
         <InviteModal
           inviteUrl={inviteUrl}
+          inviteId={inviteId}
           onClose={() => setShowInvite(false)}
+          onRefresh={handleRefreshInvite}
         />
       )}
 
@@ -639,6 +731,8 @@ export default function MovieNight() {
           message={confirmModal.message}
           confirmText={confirmModal.confirmText}
           destructive={confirmModal.destructive}
+          inputLabel={confirmModal.inputLabel}
+          inputPlaceholder={confirmModal.inputPlaceholder}
           onConfirm={confirmModal.onConfirm}
           onCancel={() => setConfirmModal(null)}
         />

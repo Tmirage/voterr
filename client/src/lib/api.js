@@ -48,14 +48,6 @@ async function request(method, endpoint, body = null) {
   }
 
   const data = await response.json();
-  
-  if (data._serviceWarnings && notificationCallback) {
-    data._serviceWarnings.forEach(warning => {
-      notificationCallback(warning.message, warning.type || 'warning', 5000, warning.service, warning.circuitOpen);
-    });
-    delete data._serviceWarnings;
-  }
-
   return data;
 }
 

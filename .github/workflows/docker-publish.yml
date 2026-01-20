@@ -20,6 +20,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify version match
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Version mismatch! Tag is v$TAG_VERSION but package.json is $PKG_VERSION"
+            exit 1
+          fi
+          echo "Version verified: $PKG_VERSION"
+
+      - name: Test build
+        run: |
+          npm ci --omit=dev
+          cd client && npm ci && npm run build
+          echo "Build successful"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

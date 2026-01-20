@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/', requireNonGuest, (req, res) => {
   const users = db.prepare(`
-    SELECT id, username, email, avatar_url, is_local, is_admin, created_at
+    SELECT id, username, email, avatar_url, is_local, is_admin, is_app_admin, created_at
     FROM users
     ORDER BY username
   `).all();
@@ -19,6 +19,7 @@ router.get('/', requireNonGuest, (req, res) => {
     avatarUrl: u.avatar_url,
     isLocal: u.is_local === 1,
     isAdmin: u.is_admin === 1,
+    isAppAdmin: u.is_app_admin === 1,
     createdAt: u.created_at
   })));
 });
@@ -110,6 +111,10 @@ router.patch('/:id/admin', requireAdmin, (req, res) => {
   const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!targetUser) {
     return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (targetUser.is_local) {
+    return res.status(400).json({ error: 'Local users cannot be made admin' });
   }
 
   if (parseInt(id) === req.session.userId) {

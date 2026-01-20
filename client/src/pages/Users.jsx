@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Users as UsersIcon, UserPlus, Trash2, Download, Shield, ShieldOff } from 'lucide-react';
 import clsx from 'clsx';
+import LoadingSpinner from '../components/LoadingSpinner';
 import ConfirmModal from '../components/ConfirmModal';
+import { isTouch, getModKey } from '../lib/platform';
 
 export default function Users() {
   const { user } = useAuth();
@@ -114,11 +116,7 @@ export default function Users() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -146,6 +144,28 @@ export default function Users() {
         </div>
       </div>
 
+      <div className="bg-gray-800 rounded-xl p-4 mb-6">
+        <p className="text-sm text-gray-300 mb-3">User roles and types:</p>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="flex items-start gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-purple-600/30 text-purple-300 shrink-0">App Admin</span>
+            <span className="text-gray-400">The Plex account that registered Voterr. Full control over all settings and users.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-indigo-600/30 text-indigo-300 shrink-0">Admin</span>
+            <span className="text-gray-400">Can manage groups and movie nights. Assigned by App Admin.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-orange-600/30 text-orange-300 shrink-0">Plex</span>
+            <span className="text-gray-400">Imported from your Plex friends. Can login with their Plex account.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-gray-600/50 text-gray-400 shrink-0">Local</span>
+            <span className="text-gray-400">Manually created accounts. Need an invite link to vote on a movie night.</span>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-gray-800 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700">
           <h2 className="text-lg text-white">All Users ({users.length})</h2>
@@ -167,25 +187,40 @@ export default function Users() {
                   </div>
                 )}
                 <div>
-                  <p className="text-white">{u.username}</p>
-                  <p className="text-sm text-gray-400">
-                    {u.isLocal ? 'Local User' : 'Plex User'}
-                    {u.isAdmin && ' • Admin'}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white">{u.username}</p>
+                    {u.isAppAdmin && (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-purple-600/30 text-purple-300">App Admin</span>
+                    )}
+                    {u.isAdmin && !u.isAppAdmin && (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-indigo-600/30 text-indigo-300">Admin</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={clsx(
+                      "px-1.5 py-0.5 text-xs rounded",
+                      u.isLocal ? "bg-gray-600/50 text-gray-400" : "bg-orange-600/30 text-orange-300"
+                    )}>
+                      {u.isLocal ? 'Local' : 'Plex'}
+                    </span>
+                    {u.email && <span className="text-xs text-gray-500">{u.email}</span>}
+                  </div>
                 </div>
               </div>
-              {user.isAdmin && u.id !== user.id && (
+              {user.isAppAdmin && u.id !== user.id && !u.isAppAdmin && (
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleToggleAdmin(u.id)}
-                    className={clsx(
-                      "p-2 transition-colors",
-                      u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
-                    )}
-                    title={u.isAdmin ? "Remove admin" : "Make admin"}
-                  >
-                    {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
-                  </button>
+                  {!u.isLocal && (
+                    <button
+                      onClick={() => handleToggleAdmin(u.id)}
+                      className={clsx(
+                        "p-2 transition-colors",
+                        u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
+                      )}
+                      title={u.isAdmin ? "Remove admin" : "Make admin"}
+                    >
+                      {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(u.id)}
                     className="p-2 text-gray-400 hover:text-red-400 transition-colors"
@@ -200,7 +235,15 @@ export default function Users() {
       </div>
 
       {showAddLocal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setShowAddLocal(false);
+            }
+          }}
+        >
           <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
             <h2 className="text-xl text-white mb-4">Add Local User</h2>
             <form onSubmit={handleCreateLocal} className="space-y-4">
@@ -210,6 +253,12 @@ export default function Users() {
                   type="text"
                   value={newUser.username}
                   onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && newUser.username.trim()) {
+                      e.preventDefault();
+                      handleCreateLocal(e);
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                   autoFocus
                 />
@@ -220,23 +269,31 @@ export default function Users() {
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && newUser.username.trim()) {
+                      e.preventDefault();
+                      handleCreateLocal(e);
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
-              <div className="flex gap-3 justify-end">
+              <div className="flex gap-3 justify-end items-center">
                 <button
                   type="button"
                   onClick={() => setShowAddLocal(false)}
-                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors flex items-center gap-2"
                 >
                   Cancel
+                  {!isTouch() && <kbd className="text-[10px] px-1.5 py-0.5 bg-gray-700 rounded">Esc</kbd>}
                 </button>
                 <button
                   type="submit"
                   disabled={!newUser.username.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-2"
                 >
                   Create
+                  {!isTouch() && <kbd className="text-[10px] px-1.5 py-0.5 bg-black/20 rounded">{getModKey()}↵</kbd>}
                 </button>
               </div>
             </form>
@@ -245,7 +302,21 @@ export default function Users() {
       )}
 
       {showImportPlex && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setShowImportPlex(false);
+              setSelectedFriends(new Set());
+            }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && selectedFriends.size > 0) {
+              e.preventDefault();
+              handleImportPlex(plexFriends.filter(f => selectedFriends.has(f.plexId)));
+            }
+          }}
+          tabIndex={0}
+        >
           <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
             <h2 className="text-xl text-white mb-4">Import Plex Friends</h2>
             
@@ -305,19 +376,21 @@ export default function Users() {
               </>
             )}
 
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex gap-3 items-center">
               <button
                 onClick={() => { setShowImportPlex(false); setSelectedFriends(new Set()); }}
-                className="flex-1 px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                className="flex-1 px-4 py-2 text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2"
               >
                 Cancel
+                {!isTouch() && <kbd className="text-[10px] px-1.5 py-0.5 bg-gray-700 rounded">Esc</kbd>}
               </button>
               {selectedFriends.size > 0 && (
                 <button
                   onClick={() => handleImportPlex(plexFriends.filter(f => selectedFriends.has(f.plexId)))}
-                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  Import {selectedFriends.size} user{selectedFriends.size > 1 ? 's' : ''}
+                  Import {selectedFriends.size}
+                  {!isTouch() && <kbd className="text-[10px] px-1.5 py-0.5 bg-black/20 rounded">{getModKey()}↵</kbd>}
                 </button>
               )}
             </div>

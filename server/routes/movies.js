@@ -1,20 +1,44 @@
 import { Router } from 'express';
-import db from '../db/index.js';
 import { requireNonGuestOrInvite } from '../middleware/auth.js';
 import { getPlexServers, getPlexLibraries, getPlexMovies, searchPlexMovies } from '../services/plex.js';
-import { getPlexToken, getSetting } from '../services/settings.js';
-import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig, getOverseerrStatus } from '../services/overseerr.js';
-import { searchMovies as searchTmdbMovies, isTmdbConfigured } from '../services/tmdb.js';
+import { getPlexToken } from '../services/settings.js';
+import { searchOverseerrMovies, getOverseerrTrending, getOverseerrConfig, getOverseerrMovieByTmdbId, searchOverseerrMovieRating } from '../services/overseerr.js';
+import { searchMovies as searchTmdbMovies, validateTmdbApiKey, getMovieDetails as getTmdbMovieDetails, findMovieRating } from '../services/tmdb.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
 
 const router = Router();
 
 let cachedServerUrl = null;
 let cachedMovieLibraryKey = null;
+let cachedServerId = null;
 
-async function getPlexServerAndLibrary(plexToken) {
-  if (cachedServerUrl && cachedMovieLibraryKey) {
-    return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey };
+export function clearPlexCache() {
+  cachedServerUrl = null;
+  cachedMovieLibraryKey = null;
+  cachedServerId = null;
+}
+
+export function getPlexServerId() {
+  return cachedServerId;
+}
+
+export async function ensurePlexServerId(plexToken) {
+  if (cachedServerId) return cachedServerId;
+  if (!plexToken) return null;
+  try {
+    const servers = await getPlexServers(plexToken);
+    if (servers.length > 0) {
+      cachedServerId = servers[0].clientIdentifier;
+    }
+    return cachedServerId;
+  } catch {
+    return null;
+  }
+}
+
+export async function getPlexServerAndLibrary(plexToken) {
+  if (cachedServerUrl && cachedMovieLibraryKey && cachedServerId) {
+    return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey, serverId: cachedServerId };
   }
 
   const servers = await getPlexServers(plexToken);
@@ -29,6 +53,7 @@ async function getPlexServerAndLibrary(plexToken) {
   }
 
   cachedServerUrl = connection.uri;
+  cachedServerId = server.clientIdentifier;
 
   const libraries = await getPlexLibraries(cachedServerUrl, plexToken);
   const movieLibrary = libraries.find(lib => lib.type === 'movie');
@@ -38,7 +63,7 @@ async function getPlexServerAndLibrary(plexToken) {
 
   cachedMovieLibraryKey = movieLibrary.key;
 
-  return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey };
+  return { serverUrl: cachedServerUrl, libraryKey: cachedMovieLibraryKey, serverId: cachedServerId };
 }
 
 router.get('/library', requireNonGuestOrInvite, async (req, res) => {
@@ -57,7 +82,8 @@ router.get('/library', requireNonGuestOrInvite, async (req, res) => {
       year: m.year,
       overview: m.summary,
       runtime: m.duration,
-      posterUrl: m.thumb
+      posterUrl: m.thumb,
+      voteAverage: m.audienceRating || m.rating || null
     })));
   } catch (error) {
     console.error('Failed to get library:', error);
@@ -75,24 +101,7 @@ router.get('/search', requireNonGuestOrInvite, async (req, res) => {
   try {
     if (source === 'overseerr') {
       const movies = await searchOverseerrMovies(q);
-      const _serviceWarnings = [];
-      const overseerrStatus = getOverseerrStatus();
-      if (overseerrStatus.configured && overseerrStatus.failed) {
-        const msg = overseerrStatus.circuitOpen 
-          ? `Overseerr disabled for ${overseerrStatus.remainingMinutes} min (${overseerrStatus.error})`
-          : `Overseerr unavailable: ${overseerrStatus.error}`;
-        _serviceWarnings.push({
-          message: msg,
-          type: 'warning',
-          service: 'overseerr',
-          circuitOpen: overseerrStatus.circuitOpen,
-          remainingMinutes: overseerrStatus.remainingMinutes
-        });
-      }
-      return res.json({ 
-        results: movies.slice(0, 20),
-        ...(_serviceWarnings.length > 0 && { _serviceWarnings })
-      });
+      return res.json({ results: movies.slice(0, 20) });
     }
 
     if (source === 'tmdb') {
@@ -115,7 +124,8 @@ router.get('/search', requireNonGuestOrInvite, async (req, res) => {
       overview: m.summary,
       runtime: m.duration,
       posterUrl: m.thumb,
-      mediaType: 'plex'
+      mediaType: 'plex',
+      voteAverage: m.audienceRating || m.rating || null
     })));
   } catch (error) {
     console.error('Failed to search movies:', error);
@@ -138,8 +148,9 @@ router.get('/overseerr/status', requireNonGuestOrInvite, async (req, res) => {
   res.json({ configured: config.configured });
 });
 
-router.get('/tmdb/status', requireNonGuestOrInvite, (req, res) => {
-  res.json({ configured: isTmdbConfigured() });
+router.get('/tmdb/status', requireNonGuestOrInvite, async (req, res) => {
+  const status = await validateTmdbApiKey();
+  res.json(status);
 });
 
 router.get('/:ratingKey', requireNonGuestOrInvite, async (req, res) => {
@@ -183,6 +194,53 @@ router.get('/:ratingKey', requireNonGuestOrInvite, async (req, res) => {
   } catch (error) {
     console.error('Failed to get movie details:', error);
     res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+router.get('/tmdb/:tmdbId', requireNonGuestOrInvite, async (req, res) => {
+  const { tmdbId } = req.params;
+  
+  try {
+    // Try Overseerr first
+    let details = await getOverseerrMovieByTmdbId(tmdbId);
+    
+    // Fallback to TMDB
+    if (!details) {
+      details = await getTmdbMovieDetails(tmdbId);
+    }
+    
+    if (!details) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+    res.json(details);
+  } catch (error) {
+    console.error('Failed to get movie details:', error);
+    res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+router.get('/rating', requireNonGuestOrInvite, async (req, res) => {
+  const { title, year } = req.query;
+  
+  if (!title) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
+  
+  try {
+    // Try Overseerr first
+    let result = await searchOverseerrMovieRating(title, year);
+    
+    // Fallback to TMDB
+    if (!result) {
+      result = await findMovieRating(title, year);
+    }
+    
+    if (!result) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to find movie rating' });
   }
 });
 

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { serveImage, getCacheStats, clearCache } from '../services/imageCache.js';
-import { requireNonGuest } from '../middleware/auth.js';
+import { requireNonGuest, requireAdmin } from '../middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,11 +35,11 @@ const upload = multer({
 
 const router = Router();
 
-router.get('/cache/stats', requireNonGuest, (req, res) => {
+router.get('/cache/stats', requireAdmin, (req, res) => {
   res.json(getCacheStats());
 });
 
-router.delete('/cache/clear', requireNonGuest, (req, res) => {
+router.delete('/cache/clear', requireAdmin, (req, res) => {
   const deleted = clearCache();
   res.json({ deleted });
 });
@@ -56,7 +56,8 @@ router.post('/upload', requireNonGuest, upload.single('image'), (req, res) => {
 
 router.get('/uploads/:filename', (req, res) => {
   const { filename } = req.params;
-  const filePath = join(uploadsDir, filename);
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '');
+  const filePath = join(uploadsDir, safeName);
   if (!existsSync(filePath)) {
     return res.status(404).send('Image not found');
   }

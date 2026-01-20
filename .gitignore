@@ -6,3 +6,4 @@ data/
 *.log
 dist
 client/dist
+.windsurf/

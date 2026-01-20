@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Settings as SettingsIcon, Server, Database, Check, X, Loader2, Film, HardDrive, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, Server, Database, Check, X, Loader2, Film, HardDrive, Trash2, Tv, Search, Eye } from 'lucide-react';
 import clsx from 'clsx';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function Settings() {
     cachePlexImages: false
   });
   const [cacheStats, setCacheStats] = useState(null);
+  const [plexInfo, setPlexInfo] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
   const [testResults, setTestResults] = useState({
     overseerr: null,
@@ -29,10 +31,45 @@ export default function Settings() {
     tmdb: false
   });
   const [saveMessage, setSaveMessage] = useState(null);
+  const [resetting, setResetting] = useState({ overseerr: false, tautulli: false });
 
   useEffect(() => {
     loadSettings();
   }, []);
+
+  function notifyServiceStatusChanged() {
+    window.dispatchEvent(new Event('service-status-changed'));
+  }
+
+  async function handleResetOverseerr() {
+    if (!confirm('Reset Overseerr settings? This will clear URL and API key.')) return;
+    setResetting(r => ({ ...r, overseerr: true }));
+    try {
+      await api.post('/settings/reset/overseerr');
+      setConfig(c => ({ ...c, overseerrUrl: '', overseerrApiKey: '' }));
+      setTestResults(r => ({ ...r, overseerr: null }));
+      notifyServiceStatusChanged();
+    } catch (error) {
+      console.error('Failed to reset Overseerr:', error);
+    } finally {
+      setResetting(r => ({ ...r, overseerr: false }));
+    }
+  }
+
+  async function handleResetTautulli() {
+    if (!confirm('Reset Tautulli settings? This will clear URL and API key.')) return;
+    setResetting(r => ({ ...r, tautulli: true }));
+    try {
+      await api.post('/settings/reset/tautulli');
+      setConfig(c => ({ ...c, tautulliUrl: '', tautulliApiKey: '' }));
+      setTestResults(r => ({ ...r, tautulli: null }));
+      notifyServiceStatusChanged();
+    } catch (error) {
+      console.error('Failed to reset Tautulli:', error);
+    } finally {
+      setResetting(r => ({ ...r, tautulli: false }));
+    }
+  }
 
   async function loadSettings() {
     try {
@@ -46,6 +83,7 @@ export default function Settings() {
         cachePlexImages: settings.cachePlexImages || false
       });
       loadCacheStats();
+      loadPlexInfo();
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -59,6 +97,7 @@ export default function Settings() {
     try {
       await api.post('/settings', config);
       setSaveMessage({ type: 'success', text: 'Settings saved' });
+      notifyServiceStatusChanged();
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
       setSaveMessage({ type: 'error', text: error.message || 'Failed to save settings' });
@@ -76,6 +115,7 @@ export default function Settings() {
         apiKey: config.overseerrApiKey
       });
       setTestResults(r => ({ ...r, overseerr: { success: true, message: 'Connected successfully' } }));
+      notifyServiceStatusChanged();
     } catch (error) {
       setTestResults(r => ({ ...r, overseerr: { success: false, message: error.message || 'Connection failed' } }));
     } finally {
@@ -92,6 +132,7 @@ export default function Settings() {
         apiKey: config.tautulliApiKey
       });
       setTestResults(r => ({ ...r, tautulli: { success: true, message: 'Connected successfully' } }));
+      notifyServiceStatusChanged();
     } catch (error) {
       setTestResults(r => ({ ...r, tautulli: { success: false, message: error.message || 'Connection failed' } }));
     } finally {
@@ -105,6 +146,15 @@ export default function Settings() {
       setCacheStats(stats);
     } catch (error) {
       console.error('Failed to load cache stats:', error);
+    }
+  }
+
+  async function loadPlexInfo() {
+    try {
+      const info = await api.get('/settings/plex/info');
+      setPlexInfo(info);
+    } catch (error) {
+      console.error('Failed to load Plex info:', error);
     }
   }
 
@@ -134,90 +184,203 @@ export default function Settings() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl text-white mb-1">Settings</h1>
-        <p className="text-gray-400 text-sm">Configure external services</p>
+        <p className="text-gray-400 text-sm">Configure external services and movie sources</p>
       </div>
 
       <div className="bg-gray-800 rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-orange-600/20 rounded-lg">
+            <Tv className="h-5 w-5 text-orange-400" />
+          </div>
+          <div>
+            <h2 className="text-lg text-white">Plex Server</h2>
+            <p className="text-sm text-gray-400">Your connected Plex media server</p>
+          </div>
+        </div>
+
+        {plexInfo?.configured ? (
+          <div className="bg-gray-700/50 rounded-lg p-4">
+            <div className="flex items-center gap-2 text-green-400 text-sm mb-2">
+              <Check className="h-4 w-4" />
+              Connected
+            </div>
+            <p className="text-sm text-gray-300">{plexInfo.serverUrl}</p>
+            <p className="text-xs text-gray-500 mt-1">Library ID: {plexInfo.libraryId}</p>
+          </div>
+        ) : (
+          <div className="bg-gray-700/50 rounded-lg p-4 text-gray-400 text-sm">
+            No Plex server configured
+          </div>
+        )}
+        <p className="mt-3 text-xs text-gray-500">
+          Plex is your primary movie source. Movies from your Plex library are always available for nomination.
+        </p>
+      </div>
+
+      <div className="bg-gray-800 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-indigo-600/20 rounded-lg">
-            <Server className="h-5 w-5 text-indigo-400" />
+            <Search className="h-5 w-5 text-indigo-400" />
           </div>
           <div>
-            <h2 className="text-lg text-white">Overseerr</h2>
-            <p className="text-sm text-gray-400">Browse and nominate any movie from TMDB</p>
+            <h2 className="text-lg text-white">Movie Search (TMDB)</h2>
+            <p className="text-sm text-gray-400">Search and nominate movies not in your Plex library</p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">URL</label>
-            <input
-              type="text"
-              value={config.overseerrUrl}
-              onChange={(e) => setConfig({ ...config, overseerrUrl: e.target.value })}
-              placeholder="http://localhost:5055"
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">API Key</label>
-            <input
-              type="password"
-              value={config.overseerrApiKey}
-              onChange={(e) => setConfig({ ...config, overseerrApiKey: e.target.value })}
-              placeholder="Your Overseerr API key"
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-            />
-            <p className="mt-1 text-xs text-gray-500">Settings → General → API Key</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={testOverseerr}
-              disabled={testing.overseerr || !config.overseerrUrl || !config.overseerrApiKey}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              {testing.overseerr ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Test Connection'
+        <div className="bg-gray-700/30 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-300 mb-2">How movie search works:</p>
+          <ul className="text-xs text-gray-400 space-y-1">
+            <li>- Plex library is always searched first</li>
+            <li>- If Overseerr is configured, it provides additional TMDB search results</li>
+            <li>- If Overseerr is not available, TMDB API is used directly as fallback</li>
+            <li>- Configure at least one (Overseerr or TMDB API key) to search beyond your Plex library</li>
+          </ul>
+        </div>
+
+        <div className="border-t border-gray-700 pt-4 mt-4">
+          <h3 className="text-sm text-white mb-3 flex items-center gap-2">
+            <Server className="h-4 w-4 text-indigo-400" />
+            Overseerr (recommended)
+          </h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Overseerr provides movie search with request management. If you have Overseerr, use this instead of a direct TMDB key.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">URL</label>
+              <input
+                type="text"
+                value={config.overseerrUrl}
+                onChange={(e) => setConfig({ ...config, overseerrUrl: e.target.value })}
+                placeholder="http://localhost:5055"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">API Key</label>
+              <input
+                type="password"
+                value={config.overseerrApiKey}
+                onChange={(e) => setConfig({ ...config, overseerrApiKey: e.target.value })}
+                placeholder="Your Overseerr API key"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">Settings → General → API Key</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={testOverseerr}
+                disabled={testing.overseerr || !config.overseerrUrl || !config.overseerrApiKey}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                {testing.overseerr ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Test Connection'
+                )}
+              </button>
+              <button
+                onClick={handleResetOverseerr}
+                disabled={resetting.overseerr || (!config.overseerrUrl && !config.overseerrApiKey)}
+                className="px-4 py-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {resetting.overseerr ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Reset
+              </button>
+              {testResults.overseerr && (
+                <div className={clsx(
+                  "flex items-center gap-2 text-sm",
+                  testResults.overseerr.success ? "text-green-400" : "text-red-400"
+                )}>
+                  {testResults.overseerr.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  {testResults.overseerr.message}
+                </div>
               )}
-            </button>
-            {testResults.overseerr && (
-              <div className={clsx(
-                "flex items-center gap-2 text-sm",
-                testResults.overseerr.success ? "text-green-400" : "text-red-400"
-              )}>
-                {testResults.overseerr.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                {testResults.overseerr.message}
-              </div>
-            )}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-700 pt-4 mt-4">
+          <h3 className="text-sm text-white mb-3 flex items-center gap-2">
+            <Film className="h-4 w-4 text-green-400" />
+            TMDB API (fallback)
+          </h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Direct TMDB access. Used when Overseerr is not configured or unavailable.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">API Key</label>
+              <input
+                type="password"
+                value={config.tmdbApiKey}
+                onChange={(e) => setConfig({ ...config, tmdbApiKey: e.target.value })}
+                placeholder="Your TMDB API key"
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Get a free API key at themoviedb.org/settings/api
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={testTmdb}
+                disabled={testing.tmdb || !config.tmdbApiKey}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                {testing.tmdb ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Test API Key'
+                )}
+              </button>
+              {testResults.tmdb && (
+                <div className={clsx(
+                  "flex items-center gap-2 text-sm",
+                  testResults.tmdb.success ? "text-green-400" : "text-red-400"
+                )}>
+                  {testResults.tmdb.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                  {testResults.tmdb.message}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="bg-gray-800 rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-purple-600/20 rounded-lg">
-            <Database className="h-5 w-5 text-purple-400" />
+            <Eye className="h-5 w-5 text-purple-400" />
           </div>
           <div>
             <h2 className="text-lg text-white">Tautulli</h2>
-            <p className="text-sm text-gray-400">Track watch history to show who has seen movies</p>
+            <p className="text-sm text-gray-400">Watch history tracking</p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="bg-gray-700/30 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-300 mb-2">What Tautulli provides:</p>
+          <ul className="text-xs text-gray-400 space-y-1">
+            <li>- Shows which group members have already watched a nominated movie</li>
+            <li>- Helps avoid picking movies everyone has seen</li>
+            <li>- Watch status is displayed on movie cards during voting</li>
+          </ul>
+        </div>
+
+        <div className="space-y-3">
           <div>
             <label className="block text-sm text-gray-400 mb-1">URL</label>
             <input
@@ -251,6 +414,18 @@ export default function Settings() {
                 'Test Connection'
               )}
             </button>
+            <button
+              onClick={handleResetTautulli}
+              disabled={resetting.tautulli || (!config.tautulliUrl && !config.tautulliApiKey)}
+              className="px-4 py-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {resetting.tautulli ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Reset
+            </button>
             {testResults.tautulli && (
               <div className={clsx(
                 "flex items-center gap-2 text-sm",
@@ -258,56 +433,6 @@ export default function Settings() {
               )}>
                 {testResults.tautulli.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
                 {testResults.tautulli.message}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-gray-800 rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-green-600/20 rounded-lg">
-            <Film className="h-5 w-5 text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-lg text-white">TMDB</h2>
-            <p className="text-sm text-gray-400">Fallback for movie search when Overseerr is not configured</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">API Key</label>
-            <input
-              type="password"
-              value={config.tmdbApiKey}
-              onChange={(e) => setConfig({ ...config, tmdbApiKey: e.target.value })}
-              placeholder="Your TMDB API key"
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Get a free API key at themoviedb.org/settings/api
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={testTmdb}
-              disabled={testing.tmdb || !config.tmdbApiKey}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              {testing.tmdb ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                'Test API Key'
-              )}
-            </button>
-            {testResults.tmdb && (
-              <div className={clsx(
-                "flex items-center gap-2 text-sm",
-                testResults.tmdb.success ? "text-green-400" : "text-red-400"
-              )}>
-                {testResults.tmdb.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                {testResults.tmdb.message}
               </div>
             )}
           </div>

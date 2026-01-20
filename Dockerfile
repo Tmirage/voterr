@@ -3,15 +3,17 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
 
 # Copy package files
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install server dependencies (production only)
+RUN npm ci --omit=dev
+
+# Install client dependencies (includes devDeps for build)
 RUN cd client && npm ci
 
 # Copy source code
@@ -25,8 +27,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies only
-RUN apk add --no-cache wget tini
+# Install runtime dependencies for native modules
+RUN apk add --no-cache wget tini libstdc++
 
 # Create non-root user
 RUN addgroup -g 1001 voterr && \
@@ -42,6 +44,9 @@ COPY --from=builder /app/package.json ./
 RUN mkdir -p /app/data && chown -R voterr:voterr /app
 
 USER voterr
+
+# Production optimizations (Express caching, less verbose errors)
+ENV NODE_ENV=production
 
 EXPOSE 5056
 

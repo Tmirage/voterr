@@ -14,8 +14,12 @@ import {
   Upload
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import clsx from 'clsx';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageCropper from '../components/ImageCropper';
+import AnimatedList from '../components/AnimatedList';
+import LoadingSpinner from '../components/LoadingSpinner';
+import DatePicker from '../components/DatePicker';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -36,6 +40,12 @@ export default function GroupDetail() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [schedules, setSchedules] = useState([]);
   const [movieNights, setMovieNights] = useState([]);
+  const [historyNights, setHistoryNights] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddMembers, setShowAddMembers] = useState(false);
@@ -48,7 +58,8 @@ export default function GroupDetail() {
     dayOfWeek: 3,
     time: '20:00',
     recurrenceType: 'weekly',
-    advanceCount: 1
+    advanceCount: 1,
+    fixedDate: ''
   });
 
   const RECURRENCE_LABELS = {
@@ -76,6 +87,32 @@ export default function GroupDetail() {
       console.error('Failed to load group:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadHistory(page = 0) {
+    setLoadingHistory(true);
+    try {
+      const data = await api.get(`/schedules/movie-nights/group/${id}/history?page=${page}`);
+      if (page === 0) {
+        setHistoryNights(data.nights);
+      } else {
+        setHistoryNights(prev => [...prev, ...data.nights]);
+      }
+      setHistoryHasMore(data.hasMore);
+      setHistoryTotal(data.total);
+      setHistoryPage(page);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  function handleShowHistory() {
+    setShowHistory(true);
+    if (historyNights.length === 0) {
+      loadHistory(0);
     }
   }
 
@@ -243,11 +280,7 @@ export default function GroupDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!group) {
@@ -400,48 +433,116 @@ export default function GroupDetail() {
           </div>
 
           <div className="bg-gray-800 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-700">
-              <h2 className="text-lg text-white">Movie Nights</h2>
+            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className={`text-lg transition-colors ${!showHistory ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  Upcoming
+                </button>
+                <button
+                  onClick={handleShowHistory}
+                  className={`text-lg transition-colors ${showHistory ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  History {historyTotal > 0 && `(${historyTotal})`}
+                </button>
+              </div>
             </div>
 
-            {movieNights.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No movie nights scheduled</p>
-              </div>
+            {!showHistory ? (
+              movieNights.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No upcoming movie nights</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-700">
+                  {movieNights.slice(0, 10).map((night) => (
+                    <Link
+                      key={night.id}
+                      to={`/movie-night/${night.id}`}
+                      className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div>
+                        <p className="text-white">
+                          {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
+                        </p>
+                        <p className="text-sm text-gray-400">
+                          {night.time} • {night.nominationCount || 0} nominations
+                          {night.hostName && ` • Host: ${night.hostName}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {night.isCancelled && (
+                          <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
+                            Cancelled
+                          </span>
+                        )}
+                        {night.status === 'decided' && (
+                          <span className="px-2 py-1 bg-green-600/20 text-green-400 text-xs rounded">
+                            Decided
+                          </span>
+                        )}
+                        <ChevronRight className="h-5 w-5 text-gray-500" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="divide-y divide-gray-700">
-                {movieNights.slice(0, 10).map((night) => (
-                  <Link
-                    key={night.id}
-                    to={`/movie-night/${night.id}`}
-                    className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
-                  >
-                    <div>
-                      <p className="text-white">
-                        {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {night.time} • {night.nominationCount || 0} nominations
-                        {night.hostName && ` • Host: ${night.hostName}`}
-                      </p>
+              loadingHistory && historyNights.length === 0 ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mx-auto"></div>
+                </div>
+              ) : historyNights.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No past movie nights</p>
+                </div>
+              ) : (
+                <div>
+                  <div className="divide-y divide-gray-700">
+                    {historyNights.map((night) => (
+                      <Link
+                        key={night.id}
+                        to={`/movie-night/${night.id}`}
+                        className="px-6 py-4 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div>
+                          <p className="text-white">
+                            {format(parseISO(night.date), 'EEEE, MMM d, yyyy')}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {night.time}
+                            {night.winningMovieTitle ? ` • Winner: ${night.winningMovieTitle}` : ' • No winner decided'}
+                            {night.hostName && ` • Host: ${night.hostName}`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {night.isCancelled && (
+                            <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
+                              Cancelled
+                            </span>
+                          )}
+                          <ChevronRight className="h-5 w-5 text-gray-500" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  {historyHasMore && (
+                    <div className="p-4 border-t border-gray-700">
+                      <button
+                        onClick={() => loadHistory(historyPage + 1)}
+                        disabled={loadingHistory}
+                        className="w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+                      >
+                        {loadingHistory ? 'Loading...' : 'Load more'}
+                      </button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {night.isCancelled && (
-                        <span className="px-2 py-1 bg-red-600/20 text-red-400 text-xs rounded">
-                          Cancelled
-                        </span>
-                      )}
-                      {night.status === 'decided' && (
-                        <span className="px-2 py-1 bg-green-600/20 text-green-400 text-xs rounded">
-                          Decided
-                        </span>
-                      )}
-                      <ChevronRight className="h-5 w-5 text-gray-500" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
+                  )}
+                </div>
+              )
             )}
           </div>
         </div>
@@ -483,7 +584,7 @@ export default function GroupDetail() {
               <div>
                 <label className="block text-sm text-gray-400 mb-2">Votes per user</label>
                 <select
-                  value={group.maxVotesPerUser || 3}
+                  value={group.maxVotesPerUser}
                   onChange={async (e) => {
                     try {
                       await api.patch(`/groups/${id}`, { 
@@ -503,6 +604,38 @@ export default function GroupDetail() {
                     <option key={n} value={n}>{n} vote{n !== 1 ? 's' : ''}</option>
                   ))}
                 </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm text-gray-400">Allow sharing</label>
+                  <p className="text-xs text-gray-500">Enable invite links for movie nights</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/groups/${id}`, { 
+                        name: group.name,
+                        description: group.description,
+                        imageUrl: group.imageUrl,
+                        sharingEnabled: !group.sharingEnabled 
+                      });
+                      loadGroup();
+                    } catch (err) {
+                      console.error('Failed to update sharing:', err);
+                    }
+                  }}
+                  className={clsx(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    group.sharingEnabled ? "bg-indigo-600" : "bg-gray-600"
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      group.sharingEnabled ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                </button>
               </div>
             </div>
           </div>
@@ -537,10 +670,18 @@ export default function GroupDetail() {
                       </div>
                     )}
                     <div>
-                      <p className="text-sm text-white">{member.username}</p>
-                      <p className="text-xs text-gray-500">
-                        {member.role === 'admin' ? 'Admin' : member.isLocal ? 'Local' : 'Plex'}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-white">{member.username}</p>
+                        {member.role === 'admin' && (
+                          <span className="px-1.5 py-0.5 text-[10px] rounded bg-indigo-600/30 text-indigo-300">Group Admin</span>
+                        )}
+                      </div>
+                      <span className={clsx(
+                        "px-1.5 py-0.5 text-[10px] rounded",
+                        member.isLocal ? "bg-gray-600/50 text-gray-400" : "bg-orange-600/30 text-orange-300"
+                      )}>
+                        {member.isLocal ? 'Local' : 'Plex'}
+                      </span>
                     </div>
                   </div>
                   {member.id !== user.id && member.role !== 'admin' && (
@@ -567,6 +708,18 @@ export default function GroupDetail() {
               <p className="text-gray-400">No available users to add</p>
             ) : (
               <>
+                <button
+                  onClick={() => {
+                    if (selectedUserIds.length === availableUsers.length) {
+                      setSelectedUserIds([]);
+                    } else {
+                      setSelectedUserIds(availableUsers.map(u => u.id));
+                    }
+                  }}
+                  className="mb-3 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  {selectedUserIds.length === availableUsers.length ? 'Deselect All' : 'Select All'}
+                </button>
                 <div className="flex-1 overflow-y-auto space-y-2">
                   {availableUsers.map((u) => {
                     const isSelected = selectedUserIds.includes(u.id);
@@ -648,28 +801,7 @@ export default function GroupDetail() {
                   type="text"
                   value={newSchedule.name}
                   onChange={(e) => setNewSchedule({ ...newSchedule, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Day</label>
-                <select
-                  value={newSchedule.dayOfWeek}
-                  onChange={(e) => setNewSchedule({ ...newSchedule, dayOfWeek: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {DAYS.map((day, i) => (
-                    <option key={i} value={i}>{day}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={newSchedule.time}
-                  onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -677,7 +809,7 @@ export default function GroupDetail() {
                 <select
                   value={newSchedule.recurrenceType}
                   onChange={(e) => setNewSchedule({ ...newSchedule, recurrenceType: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="weekly">Weekly</option>
                   <option value="biweekly">Bi-weekly</option>
@@ -685,20 +817,53 @@ export default function GroupDetail() {
                   <option value="none">One-time</option>
                 </select>
               </div>
-              {newSchedule.recurrenceType !== 'none' && (
+              {newSchedule.recurrenceType === 'none' ? (
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
-                  <select
-                    value={newSchedule.advanceCount}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, advanceCount: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm text-gray-400 mb-1">Date</label>
+                  <DatePicker
+                    value={newSchedule.fixedDate}
+                    onChange={(date) => setNewSchedule({ ...newSchedule, fixedDate: date })}
+                    minDate={new Date().toISOString().split('T')[0]}
+                    placeholder="Select date"
+                  />
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Day</label>
+                    <select
+                      value={newSchedule.dayOfWeek}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, dayOfWeek: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {DAYS.map((day, i) => (
+                        <option key={i} value={i}>{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
+                    <select
+                      value={newSchedule.advanceCount}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, advanceCount: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Time</label>
+                <input
+                  type="time"
+                  value={newSchedule.time}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, time: e.target.value })}
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"
@@ -730,28 +895,7 @@ export default function GroupDetail() {
                   type="text"
                   value={editingSchedule.name}
                   onChange={(e) => setEditingSchedule({ ...editingSchedule, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Day</label>
-                <select
-                  value={String(editingSchedule.dayOfWeek)}
-                  onChange={(e) => setEditingSchedule({ ...editingSchedule, dayOfWeek: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {DAYS.map((day, i) => (
-                    <option key={i} value={String(i)}>{day}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={editingSchedule.time}
-                  onChange={(e) => setEditingSchedule({ ...editingSchedule, time: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -759,7 +903,7 @@ export default function GroupDetail() {
                 <select
                   value={editingSchedule.recurrenceType || 'weekly'}
                   onChange={(e) => setEditingSchedule({ ...editingSchedule, recurrenceType: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="weekly">Weekly</option>
                   <option value="biweekly">Bi-weekly</option>
@@ -768,19 +912,42 @@ export default function GroupDetail() {
                 </select>
               </div>
               {editingSchedule.recurrenceType !== 'none' && (
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
-                  <select
-                    value={editingSchedule.advanceCount || 1}
-                    onChange={(e) => setEditingSchedule({ ...editingSchedule, advanceCount: parseInt(e.target.value) })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Day</label>
+                    <select
+                      value={String(editingSchedule.dayOfWeek)}
+                      onChange={(e) => setEditingSchedule({ ...editingSchedule, dayOfWeek: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {DAYS.map((day, i) => (
+                        <option key={i} value={String(i)}>{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Movie nights ahead</label>
+                    <select
+                      value={editingSchedule.advanceCount || 1}
+                      onChange={(e) => setEditingSchedule({ ...editingSchedule, advanceCount: parseInt(e.target.value) })}
+                      className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Time</label>
+                <input
+                  type="time"
+                  value={editingSchedule.time}
+                  onChange={(e) => setEditingSchedule({ ...editingSchedule, time: e.target.value })}
+                  className="w-full h-11 px-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"

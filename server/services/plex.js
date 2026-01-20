@@ -177,7 +177,9 @@ export async function getPlexMovies(serverUrl, libraryKey, plexToken) {
       summary: movie.summary,
       duration: movie.duration ? Math.round(movie.duration / 60000) : null,
       thumb: originalThumb ? getProxiedImageUrl(originalThumb) : null,
-      addedAt: movie.addedAt
+      addedAt: movie.addedAt,
+      audienceRating: movie.audienceRating || null,
+      rating: movie.rating || null
     };
   });
 }
@@ -204,7 +206,9 @@ export async function searchPlexMovies(serverUrl, query, plexToken) {
       year: movie.year,
       summary: movie.summary,
       duration: movie.duration ? Math.round(movie.duration / 60000) : null,
-      thumb: originalThumb ? getProxiedImageUrl(originalThumb) : null
+      thumb: originalThumb ? getProxiedImageUrl(originalThumb) : null,
+      audienceRating: movie.audienceRating || null,
+      rating: movie.rating || null
     };
   });
 }
