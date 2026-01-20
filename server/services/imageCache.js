@@ -4,6 +4,29 @@ import crypto from 'crypto';
 import { getSetting } from './settings.js';
 
 const CACHE_DIR = path.join(process.cwd(), 'data', 'cache', 'images');
+const URL_MAP_FILE = path.join(process.cwd(), 'data', 'cache', 'url-map.json');
+
+let urlMap = {};
+
+function loadUrlMap() {
+  try {
+    if (fs.existsSync(URL_MAP_FILE)) {
+      urlMap = JSON.parse(fs.readFileSync(URL_MAP_FILE, 'utf-8'));
+    }
+  } catch {
+    urlMap = {};
+  }
+}
+
+function saveUrlMap() {
+  const dir = path.dirname(URL_MAP_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(URL_MAP_FILE, JSON.stringify(urlMap));
+}
+
+loadUrlMap();
 
 function ensureCacheDir() {
   if (!fs.existsSync(CACHE_DIR)) {
@@ -19,12 +42,13 @@ function isCachingEnabled() {
   return getSetting('cache_plex_images') === 'true';
 }
 
+
 export async function serveImage(req, res) {
   const { hash } = req.params;
-  const { url } = req.query;
   
-  if (!url) {
-    return res.status(400).send('Missing url parameter');
+  const originalUrl = urlMap[hash];
+  if (!originalUrl) {
+    return res.status(404).send('Image not found');
   }
 
   ensureCacheDir();
@@ -37,9 +61,9 @@ export async function serveImage(req, res) {
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(originalUrl);
     if (!response.ok) {
-      return res.redirect(url);
+      return res.status(502).send('Failed to fetch image');
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -49,7 +73,7 @@ export async function serveImage(req, res) {
     res.set('Cache-Control', 'public, max-age=31536000');
     res.send(buffer);
   } catch (error) {
-    res.redirect(url);
+    res.status(502).send('Failed to fetch image');
   }
 }
 
@@ -57,9 +81,17 @@ export function getProxiedImageUrl(originalUrl) {
   if (!originalUrl || !isCachingEnabled()) {
     return originalUrl;
   }
+  if (originalUrl.startsWith('/api/images/')) {
+    return originalUrl;
+  }
   const hash = getHash(originalUrl);
-  return `/api/images/${hash}?url=${encodeURIComponent(originalUrl)}`;
+  if (!urlMap[hash]) {
+    urlMap[hash] = originalUrl;
+    saveUrlMap();
+  }
+  return `/api/images/${hash}`;
 }
+
 
 export function getCacheStats() {
   ensureCacheDir();

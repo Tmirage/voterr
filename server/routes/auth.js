@@ -1,12 +1,48 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { getPlexAuthUrl, checkPlexPin, getPlexUser } from '../services/plex.js';
+import { getPlexAuthUrl, checkPlexPin, getPlexUser, getPlexFriends } from '../services/plex.js';
+import { getSetting } from '../services/settings.js';
 
 const router = Router();
 
 const PLEX_CLIENT_ID = process.env.PLEX_CLIENT_ID || 'voterr';
 
-router.get('/plex', async (req, res) => {
+const rateLimitMap = new Map();
+const RATE_LIMIT = 5;
+const RATE_WINDOW = 60000;
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!rateLimitMap.has(ip)) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return next();
+  }
+  
+  const entry = rateLimitMap.get(ip);
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + RATE_WINDOW;
+    return next();
+  }
+  
+  entry.count++;
+  if (entry.count > RATE_LIMIT) {
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+  
+  next();
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 300000);
+
+router.get('/plex', rateLimit, async (req, res) => {
   try {
     const { pinId, code, authUrl } = await getPlexAuthUrl(PLEX_CLIENT_ID);
     
@@ -36,11 +72,23 @@ router.get('/plex/callback', async (req, res) => {
 
     const plexUser = await getPlexUser(token);
 
-    let user = db.prepare('SELECT * FROM users WHERE plex_id = ?').get(plexUser.id.toString());
+    let user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin, is_local FROM users WHERE plex_id = ?').get(plexUser.id.toString());
 
     if (!user) {
       const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
       const isFirstUser = userCount.count === 0;
+      
+      if (!isFirstUser) {
+        const adminToken = getSetting('plex_token');
+        if (adminToken) {
+          const friends = await getPlexFriends(adminToken);
+          const isFriend = friends.some(f => f.id === plexUser.id.toString());
+          
+          if (!isFriend) {
+            return res.status(403).json({ error: 'Access denied. You must be a Plex friend of the server owner.' });
+          }
+        }
+      }
       
       const result = db.prepare(`
         INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin, is_app_admin)
@@ -55,7 +103,7 @@ router.get('/plex/callback', async (req, res) => {
         isFirstUser ? 1 : 0
       );
 
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+      user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin, is_local FROM users WHERE id = ?').get(result.lastInsertRowid);
     } else {
       db.prepare(`
         UPDATE users SET plex_token = ?, username = ?, email = ?, avatar_url = ?, updated_at = datetime('now')
@@ -92,7 +140,7 @@ router.get('/me', (req, res) => {
     return res.json({ authenticated: false });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+  const user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin, is_local FROM users WHERE id = ?').get(req.session.userId);
 
   if (!user) {
     req.session.destroy();

@@ -1,11 +1,39 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { isSetupComplete, setSettings, getAllSettings } from '../services/settings.js';
+import { isSetupComplete, setSettings, getSafeSettings } from '../services/settings.js';
 import { getPlexUser } from '../services/plex.js';
 
 const router = Router();
 
 const PLEX_CLIENT_ID = process.env.PLEX_CLIENT_ID || 'voterr';
+
+const rateLimitMap = new Map();
+const RATE_LIMIT = 5;
+const RATE_WINDOW = 60000;
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!rateLimitMap.has(ip)) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return next();
+  }
+  
+  const entry = rateLimitMap.get(ip);
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + RATE_WINDOW;
+    return next();
+  }
+  
+  entry.count++;
+  if (entry.count > RATE_LIMIT) {
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+  
+  next();
+}
 
 router.get('/status', (req, res) => {
   const complete = isSetupComplete();
@@ -17,7 +45,7 @@ router.get('/status', (req, res) => {
   });
 });
 
-router.post('/plex-auth', async (req, res) => {
+router.post('/plex-auth', rateLimit, async (req, res) => {
   if (isSetupComplete()) {
     return res.status(403).json({ error: 'Setup already complete' });
   }
@@ -162,7 +190,7 @@ router.post('/complete', async (req, res) => {
 
     setSettings(settings);
 
-    let user = db.prepare('SELECT * FROM users WHERE plex_id = ?').get(plexUser.id.toString());
+    let user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin FROM users WHERE plex_id = ?').get(plexUser.id.toString());
 
     if (!user) {
       const result = db.prepare(`
@@ -176,7 +204,7 @@ router.post('/complete', async (req, res) => {
         plexUser.thumb
       );
 
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+      user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin FROM users WHERE id = ?').get(result.lastInsertRowid);
     } else {
       db.prepare(`
         UPDATE users SET plex_token = ?, is_admin = 1, updated_at = datetime('now')
@@ -218,17 +246,15 @@ router.get('/settings', (req, res) => {
     return res.status(403).json({ error: 'Admin access required' });
   }
 
-  const settings = getAllSettings();
+  const settings = getSafeSettings();
   
-  const safeSettings = {
+  res.json({
     radarr_url: settings.radarr_url || '',
-    radarr_api_key: settings.radarr_api_key ? '••••••••' : '',
+    radarr_api_key: settings.radarr_api_key || '',
     tautulli_url: settings.tautulli_url || '',
-    tautulli_api_key: settings.tautulli_api_key ? '••••••••' : '',
-    plex_configured: !!settings.plex_token
-  };
-
-  res.json(safeSettings);
+    tautulli_api_key: settings.tautulli_api_key || '',
+    plex_configured: settings.plex_token === '••••••••'
+  });
 });
 
 router.patch('/settings', async (req, res) => {

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { serveImage, getCacheStats, clearCache } from '../services/imageCache.js';
-import { requireNonGuest, requireAdmin } from '../middleware/auth.js';
+import { requireNonGuestOrInvite, requireAdmin } from '../middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,7 +46,7 @@ router.delete('/cache/clear', requireAdmin, (req, res) => {
 
 router.get('/:hash', serveImage);
 
-router.post('/upload', requireNonGuest, upload.single('image'), (req, res) => {
+router.post('/upload', requireNonGuestOrInvite, upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No image uploaded' });
   }
@@ -54,7 +54,7 @@ router.post('/upload', requireNonGuest, upload.single('image'), (req, res) => {
   res.json({ url });
 });
 
-router.get('/uploads/:filename', (req, res) => {
+router.get('/uploads/:filename', requireNonGuestOrInvite, (req, res) => {
   const { filename } = req.params;
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '');
   const filePath = join(uploadsDir, safeName);

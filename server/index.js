@@ -24,6 +24,7 @@ import setupRoutes from './routes/setup.js';
 import settingsRoutes from './routes/settings.js';
 import imagesRoutes from './routes/images.js';
 import dashboardRoutes from './routes/dashboard.js';
+import { generateCsrfToken, csrfProtection } from './middleware/csrf.js';
 
 dotenv.config();
 
@@ -79,6 +80,12 @@ app.use(session({
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
 }));
+
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ token: generateCsrfToken(req) });
+});
+
+app.use('/api', csrfProtection);
 
 app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
