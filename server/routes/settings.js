@@ -11,10 +11,10 @@ const router = Router();
 router.get('/', requireAdmin, (req, res) => {
   res.json({
     overseerrUrl: getSetting('overseerr_url') || '',
-    overseerrApiKey: getSetting('overseerr_api_key') || '',
+    overseerrApiKey: getSetting('overseerr_api_key') ? '••••••••' : '',
     tautulliUrl: getSetting('tautulli_url') || '',
-    tautulliApiKey: getSetting('tautulli_api_key') || '',
-    tmdbApiKey: getSetting('tmdb_api_key') || '',
+    tautulliApiKey: getSetting('tautulli_api_key') ? '••••••••' : '',
+    tmdbApiKey: getSetting('tmdb_api_key') ? '••••••••' : '',
     cachePlexImages: getSetting('cache_plex_images') === 'true'
   });
 });
@@ -24,10 +24,10 @@ router.post('/', requireAdmin, (req, res) => {
 
   const settings = {};
   if (overseerrUrl !== undefined) settings.overseerr_url = overseerrUrl || null;
-  if (overseerrApiKey !== undefined) settings.overseerr_api_key = overseerrApiKey || null;
+  if (overseerrApiKey !== undefined && overseerrApiKey !== '••••••••') settings.overseerr_api_key = overseerrApiKey || null;
   if (tautulliUrl !== undefined) settings.tautulli_url = tautulliUrl || null;
-  if (tautulliApiKey !== undefined) settings.tautulli_api_key = tautulliApiKey || null;
-  if (tmdbApiKey !== undefined) settings.tmdb_api_key = tmdbApiKey || null;
+  if (tautulliApiKey !== undefined && tautulliApiKey !== '••••••••') settings.tautulli_api_key = tautulliApiKey || null;
+  if (tmdbApiKey !== undefined && tmdbApiKey !== '••••••••') settings.tmdb_api_key = tmdbApiKey || null;
   if (cachePlexImages !== undefined) settings.cache_plex_images = cachePlexImages ? 'true' : 'false';
 
   setSettings(settings);

@@ -108,7 +108,7 @@ router.post('/local', requireNonGuest, (req, res) => {
 router.patch('/:id/admin', requireAdmin, (req, res) => {
   const { id } = req.params;
 
-  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const targetUser = db.prepare('SELECT id, username, is_admin, is_local FROM users WHERE id = ?').get(id);
   if (!targetUser) {
     return res.status(404).json({ error: 'User not found' });
   }
@@ -130,7 +130,7 @@ router.patch('/:id/admin', requireAdmin, (req, res) => {
 router.delete('/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }

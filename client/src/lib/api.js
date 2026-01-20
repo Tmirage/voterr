@@ -2,6 +2,16 @@ const BASE_URL = '/api';
 
 let notificationCallback = null;
 let plexErrorCallback = null;
+let csrfToken = null;
+
+async function ensureCsrfToken() {
+  if (!csrfToken) {
+    const response = await fetch(`${BASE_URL}/csrf-token`, { credentials: 'include' });
+    const data = await response.json();
+    csrfToken = data.token;
+  }
+  return csrfToken;
+}
 
 export function setNotificationCallbacks(onNotification, onPlexError) {
   notificationCallback = onNotification;
@@ -13,11 +23,17 @@ export function getNotificationCallback() {
 }
 
 async function request(method, endpoint, body = null) {
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers['X-CSRF-Token'] = await ensureCsrfToken();
+  }
+
   const options = {
     method,
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers,
     credentials: 'include'
   };
 
@@ -52,10 +68,14 @@ async function request(method, endpoint, body = null) {
 }
 
 async function uploadRequest(endpoint, formData) {
+  const token = await ensureCsrfToken();
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     method: 'POST',
     body: formData,
-    credentials: 'include'
+    credentials: 'include',
+    headers: {
+      'X-CSRF-Token': token
+    }
   });
 
   if (!response.ok) {

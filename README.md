@@ -8,7 +8,7 @@ A film voting platform for movie nights that integrates with your Plex ecosystem
 - Import Plex users and create local users for guests
 - Create groups for different friend circles
 - Recurring and one-off movie night schedules
-- Nominate movies from your Radarr library
+- Nominate movies via Overseerr or TMDB search
 - Vote on nominations with watch history tracking via Tautulli
 - Guest access via shareable invite links
 - Host assignment with veto power
@@ -16,41 +16,18 @@ A film voting platform for movie nights that integrates with your Plex ecosystem
 
 ## Requirements
 
-- Docker and Docker Compose
+- Docker
 - Plex Media Server with Plex Pass (for OAuth)
-- Radarr (for movie library)
-- Tautulli (for watch history) - optional but recommended
+- Overseerr or TMDB API key (for movie search) - optional
+- Tautulli (for watch history) - optional
 
 ## Quick Start
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/Tmirage/voters.git
-cd voters
+docker run -d --name voterr -p 5056:5056 -v ./voterr-data:/app/data ghcr.io/tmirage/voterr:latest
 ```
 
-2. Copy the environment file and configure:
-```bash
-cp .env.example .env
-```
-
-3. Edit `.env` with your settings:
-```env
-PLEX_URL=http://your-plex-server:32400
-PLEX_TOKEN=your-plex-token
-TAUTULLI_URL=http://your-tautulli:8181
-TAUTULLI_API_KEY=your-tautulli-api-key
-RADARR_URL=http://your-radarr:7878
-RADARR_API_KEY=your-radarr-api-key
-SESSION_SECRET=generate-a-random-string
-```
-
-4. Start with Docker Compose:
-```bash
-docker-compose up -d
-```
-
-5. Access Voterr at `http://localhost:5056`
+Open `http://localhost:5056` and complete the setup wizard to configure Plex and other services.
 
 ## Getting API Keys
 
@@ -65,10 +42,15 @@ docker-compose up -d
 2. Navigate to Web Interface
 3. Copy the API Key
 
-### Radarr API Key
-1. Go to Radarr Settings
+### Overseerr API Key
+1. Go to Overseerr Settings
 2. Navigate to General
 3. Copy the API Key
+
+### TMDB API Key
+1. Create account at themoviedb.org
+2. Go to Settings > API
+3. Request an API key
 
 ## Development
 
@@ -86,9 +68,9 @@ cd client && npm install && cd ..
 npm run dev
 ```
 
-This starts:
-- Backend on `http://localhost:5056`
-- Frontend on `http://localhost:5173` (proxies API to backend)
+This starts the frontend dev server with hot reload on `http://localhost:5173`, which proxies API requests to the backend on port 5056.
+
+In production (Docker), the backend serves the built frontend directly on a single port.
 
 ### Project Structure
 ```
@@ -144,7 +126,7 @@ voterr/
 - `POST /api/schedules/movie-nights/:id/attendance` - Set attendance
 
 ### Movies
-- `GET /api/movies/library` - Get downloaded movies from Radarr
+- `GET /api/movies/library` - Get movies from Overseerr
 - `GET /api/movies/search?q=term` - Search movies
 - `GET /api/movies/:tmdbId` - Get movie details
 
@@ -168,24 +150,16 @@ voterr/
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `5056` |
-| `DATABASE_PATH` | SQLite database path | `./data/voterr.db` |
-| `SESSION_SECRET` | Session encryption key | Required in production |
-| `NODE_ENV` | Environment (development/production) | `development` |
-| `PLEX_URL` | Plex server URL | Required |
-| `PLEX_TOKEN` | Plex authentication token | Required |
-| `PLEX_CLIENT_ID` | Plex OAuth client ID | `voterr` |
-| `TAUTULLI_URL` | Tautulli server URL | Optional |
-| `TAUTULLI_API_KEY` | Tautulli API key | Optional |
-| `OVERSEERR_URL` | Overseerr server URL | Optional |
-| `OVERSEERR_API_KEY` | Overseerr API key | Optional |
-| `TMDB_API_KEY` | TMDB API key for movie search | Optional |
 | `TZ` | Timezone | `Europe/Amsterdam` |
+
+All settings (Plex, Tautulli, Overseerr, TMDB) are configured through the web UI. Session secrets are auto-generated and stored in the database.
 
 ## Security Notes
 
-- `SESSION_SECRET` is required in production mode. The application will exit with an error if not set when `NODE_ENV=production`.
-- Cookies are automatically set to `secure: true` in production mode, requiring HTTPS.
+- Session secrets are auto-generated on first run and stored in the database.
+- Cookies automatically use `secure: true` when accessed via HTTPS (auto-detected via `X-Forwarded-Proto` header from reverse proxy).
 - Admin status changes for users take effect on their next login (session is not immediately updated).
+- Invite links use rate limiting (15 requests/minute per IP) to prevent brute force attacks.
 
 ## Docker Installation
 
@@ -196,13 +170,10 @@ docker run -d \
   --name voterr \
   -p 5056:5056 \
   -v ./voterr-data:/app/data \
-  -e PLEX_URL=http://your-plex:32400 \
-  -e PLEX_TOKEN=your-token \
-  -e RADARR_URL=http://your-radarr:7878 \
-  -e RADARR_API_KEY=your-key \
-  -e SESSION_SECRET=your-secret \
   ghcr.io/tmirage/voterr:latest
 ```
+
+That's it! Open `http://localhost:5056` and complete the setup wizard to configure Plex and other services.
 
 ### Docker Compose
 
@@ -214,14 +185,6 @@ services:
     restart: unless-stopped
     ports:
       - "5056:5056"
-    environment:
-      - PLEX_URL=http://plex:32400
-      - PLEX_TOKEN=${PLEX_TOKEN}
-      - TAUTULLI_URL=http://tautulli:8181
-      - TAUTULLI_API_KEY=${TAUTULLI_API_KEY}
-      - RADARR_URL=http://radarr:7878
-      - RADARR_API_KEY=${RADARR_API_KEY}
-      - SESSION_SECRET=${SESSION_SECRET}
     volumes:
       - ./voterr-data:/app/data
 ```

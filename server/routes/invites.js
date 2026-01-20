@@ -82,7 +82,7 @@ router.post('/create', requireNonGuest, (req, res) => {
     });
   }
 
-  const token = nanoid(16);
+  const token = nanoid(32);
   
   let expiresAt = null;
   if (expiresInHours) {
@@ -128,7 +128,7 @@ router.post('/refresh/:id', requireNonGuest, (req, res) => {
     return res.status(403).json({ error: 'Sharing is disabled for this group' });
   }
 
-  const newToken = nanoid(16);
+  const newToken = nanoid(32);
   
   db.prepare('UPDATE guest_invites SET token = ? WHERE id = ?').run(newToken, id);
 
@@ -226,7 +226,7 @@ router.get('/validate/:token', rateLimit, (req, res) => {
   });
 });
 
-router.post('/local-join', (req, res) => {
+router.post('/local-join', rateLimit, (req, res) => {
   const { token, userId } = req.body;
 
   if (!token || !userId) {
@@ -248,7 +248,7 @@ router.post('/local-join', (req, res) => {
     return res.status(410).json({ error: 'Invite link has expired' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_local = 1').get(userId);
+  const user = db.prepare('SELECT id, username, avatar_url, is_local FROM users WHERE id = ? AND is_local = 1').get(userId);
   if (!user) {
     return res.status(404).json({ error: 'Local user not found' });
   }

@@ -8,8 +8,10 @@ import dotenv from 'dotenv';
 
 const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf-8'));
 
+import crypto from 'crypto';
 import { initDatabase } from './db/index.js';
 import db from './db/index.js';
+import { getSetting, setSetting } from './services/settings.js';
 import { initScheduler } from './services/scheduler.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
@@ -22,6 +24,7 @@ import setupRoutes from './routes/setup.js';
 import settingsRoutes from './routes/settings.js';
 import imagesRoutes from './routes/images.js';
 import dashboardRoutes from './routes/dashboard.js';
+import { generateCsrfToken, csrfProtection } from './middleware/csrf.js';
 
 dotenv.config();
 
@@ -46,16 +49,29 @@ app.use(cors({
 
 app.use(express.json());
 
-if (hasBuiltClient && !process.env.SESSION_SECRET) {
-  console.error('SESSION_SECRET environment variable is required');
-  process.exit(1);
-}
-
 // Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) for reverse proxy setups
 app.set('trust proxy', 1);
 
+// Session secret: use env var, or auto-generate and store in database
+
+function getSessionSecret() {
+  if (process.env.SESSION_SECRET) {
+    return process.env.SESSION_SECRET;
+  }
+  
+  // Check if we have a stored secret
+  let secret = getSetting('session_secret');
+  if (!secret) {
+    // Generate and store a new secret
+    secret = crypto.randomBytes(32).toString('hex');
+    setSetting('session_secret', secret);
+    console.log('Generated new session secret');
+  }
+  return secret;
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  secret: getSessionSecret(),
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -64,6 +80,12 @@ app.use(session({
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
 }));
+
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ token: generateCsrfToken(req) });
+});
+
+app.use('/api', csrfProtection);
 
 app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
