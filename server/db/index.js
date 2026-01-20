@@ -174,6 +174,9 @@ export async function initDatabase() {
   if (!groupColumns.some(c => c.name === 'max_votes_per_user')) {
     db.exec("ALTER TABLE groups ADD COLUMN max_votes_per_user INTEGER DEFAULT 3");
   }
+  if (!groupColumns.some(c => c.name === 'sharing_enabled')) {
+    db.exec("ALTER TABLE groups ADD COLUMN sharing_enabled INTEGER DEFAULT 1");
+  }
 
   console.log('Database initialized');
 }

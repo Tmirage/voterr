@@ -37,7 +37,8 @@ router.get('/', requireNonGuest, async (req, res) => {
            g.name as group_name,
            g.description as group_description,
            g.image_url as group_image_url,
-           g.max_votes_per_user
+           g.max_votes_per_user,
+           g.sharing_enabled
     FROM movie_nights mn
     LEFT JOIN schedules s ON mn.schedule_id = s.id
     LEFT JOIN users u ON mn.host_id = u.id
@@ -146,6 +147,7 @@ router.get('/', requireNonGuest, async (req, res) => {
       nominations: nominationsWithLeader,
       userRemainingVotes: night.max_votes_per_user - (userTotalVotes?.total || 0),
       maxVotesPerUser: night.max_votes_per_user,
+      sharingEnabled: night.sharing_enabled !== 0,
       winner,
       attendingCount: attendingUserIds.size,
       absentCount: absentUserIds.size,

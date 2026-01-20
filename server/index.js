@@ -32,30 +32,34 @@ const app = express();
 const PORT = process.env.PORT || 5056;
 
 const clientDist = join(process.cwd(), 'client', 'dist');
+const hasBuiltClient = existsSync(join(clientDist, 'index.html'));
 
-if (process.env.NODE_ENV === 'production') {
+// Serve static files if client/dist exists (production build)
+if (hasBuiltClient) {
   app.use(express.static(clientDist, { index: 'index.html' }));
 }
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : true,
+  origin: hasBuiltClient ? false : true,
   credentials: true
 }));
 
 app.use(express.json());
 
-const isProduction = process.env.NODE_ENV === 'production';
-if (isProduction && !process.env.SESSION_SECRET) {
-  console.error('SESSION_SECRET is required in production');
+if (hasBuiltClient && !process.env.SESSION_SECRET) {
+  console.error('SESSION_SECRET environment variable is required');
   process.exit(1);
 }
+
+// Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) for reverse proxy setups
+app.set('trust proxy', 1);
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,
+    secure: 'auto',
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
@@ -158,7 +162,7 @@ app.get('/join/:token', (req, res) => {
 </html>`);
 });
 
-if (process.env.NODE_ENV === 'production') {
+if (hasBuiltClient) {
   app.get('*', (req, res) => {
     res.sendFile(join(clientDist, 'index.html'));
   });

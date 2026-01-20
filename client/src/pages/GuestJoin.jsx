@@ -99,14 +99,24 @@ export default function GuestJoin() {
   }
 
   if (error) {
+    const errorMessages = {
+      'Invalid invite link': 'This invite link is no longer valid. It may have been regenerated or deleted.',
+      'Invite link has expired': 'This invite link has expired. Please ask for a new link.',
+      'This movie night has already passed': 'This movie night has already taken place.',
+      'Voting is closed for this movie night': 'Voting has ended for this movie night.',
+      'Sharing is disabled for this group': 'Sharing has been disabled for this group.',
+    };
+    
+    const friendlyMessage = errorMessages[error] || 'This invite link is not valid. Please check the link or ask for a new one.';
+    
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 rounded-xl p-8 max-w-md text-center">
           <div className="h-16 w-16 mx-auto mb-4 rounded-full bg-red-600/20 flex items-center justify-center">
-            <Film className="h-8 w-8 text-red-500" />
+            <XCircle className="h-8 w-8 text-red-500" />
           </div>
-          <h1 className="text-xl text-white mb-2">Invalid Invite</h1>
-          <p className="text-gray-400">{error}</p>
+          <h1 className="text-xl text-white mb-2">Link Not Valid</h1>
+          <p className="text-gray-400">{friendlyMessage}</p>
         </div>
       </div>
     );

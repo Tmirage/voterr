@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteNightId, setInviteNightId] = useState(null);
   const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteId, setInviteId] = useState(null);
   const [showHostPicker, setShowHostPicker] = useState(false);
   const [hostPickerNightId, setHostPickerNightId] = useState(null);
   const [plexServerId, setPlexServerId] = useState(null);
@@ -136,10 +137,21 @@ export default function Dashboard() {
     try {
       const result = await api.post('/invites/create', { movieNightId: nightId });
       setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id || null);
       setInviteNightId(nightId);
       setShowInvite(true);
     } catch (error) {
       console.error('Failed to create invite:', error);
+    }
+  }
+
+  async function handleRefreshInvite(invId) {
+    try {
+      const result = await api.post(`/invites/refresh/${invId}`);
+      setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id);
+    } catch (error) {
+      console.error('Failed to refresh invite:', error);
     }
   }
 
@@ -261,6 +273,7 @@ export default function Dashboard() {
                         </button>
                         </>
                       )}
+                      {night.sharingEnabled && (
                       <button
                         onClick={() => handleCreateInvite(night.id)}
                         className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
@@ -268,6 +281,7 @@ export default function Dashboard() {
                         <LinkIcon className="h-5 w-5" />
                         Share
                       </button>
+                      )}
                       </div>
                     </div>
                   </div>
@@ -602,10 +616,13 @@ export default function Dashboard() {
       {showInvite && (
         <InviteModal
           inviteUrl={inviteUrl}
+          inviteId={inviteId}
           onClose={() => {
             setShowInvite(false);
             setInviteUrl('');
+            setInviteId(null);
           }}
+          onRefresh={handleRefreshInvite}
         />
       )}
     </div>

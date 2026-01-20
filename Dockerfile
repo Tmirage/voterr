@@ -45,6 +45,9 @@ RUN mkdir -p /app/data && chown -R voterr:voterr /app
 
 USER voterr
 
+# Production optimizations (Express caching, less verbose errors)
+ENV NODE_ENV=production
+
 EXPOSE 5056
 
 ENTRYPOINT ["/sbin/tini", "--"]

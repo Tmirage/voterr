@@ -266,7 +266,8 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
            u.username as host_name,
            g.name as group_name,
            g.description as group_description,
-           g.image_url as group_image_url
+           g.image_url as group_image_url,
+           g.sharing_enabled
     FROM movie_nights mn
     LEFT JOIN schedules s ON mn.schedule_id = s.id
     LEFT JOIN users u ON mn.host_id = u.id
@@ -316,6 +317,7 @@ router.get('/movie-nights/:id', requireInviteMovieNight, (req, res) => {
     isArchived,
     isCancelled: night.is_cancelled === 1,
     cancelReason: night.cancel_reason,
+    sharingEnabled: night.sharing_enabled !== 0,
     canManage: permissions.canManage,
     canChangeHost: permissions.canChangeHost,
     canCancel: permissions.canCancel,

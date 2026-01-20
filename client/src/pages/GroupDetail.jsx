@@ -605,6 +605,38 @@ export default function GroupDetail() {
                   ))}
                 </select>
               </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm text-gray-400">Allow sharing</label>
+                  <p className="text-xs text-gray-500">Enable invite links for movie nights</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/groups/${id}`, { 
+                        name: group.name,
+                        description: group.description,
+                        imageUrl: group.imageUrl,
+                        sharingEnabled: !group.sharingEnabled 
+                      });
+                      loadGroup();
+                    } catch (err) {
+                      console.error('Failed to update sharing:', err);
+                    }
+                  }}
+                  className={clsx(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    group.sharingEnabled ? "bg-indigo-600" : "bg-gray-600"
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      group.sharingEnabled ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
             </div>
           </div>
 

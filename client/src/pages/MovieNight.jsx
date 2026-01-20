@@ -48,6 +48,7 @@ export default function MovieNight() {
   const [showInvite, setShowInvite] = useState(false);
   const [showHostPicker, setShowHostPicker] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteId, setInviteId] = useState(null);
   const [votesData, setVotesData] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
 
@@ -185,9 +186,20 @@ export default function MovieNight() {
     try {
       const result = await api.post('/invites/create', { movieNightId: parseInt(id) });
       setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id || null);
       setShowInvite(true);
     } catch (error) {
       console.error('Failed to create invite:', error);
+    }
+  }
+
+  async function handleRefreshInvite(invId) {
+    try {
+      const result = await api.post(`/invites/refresh/${invId}`);
+      setInviteUrl(`${window.location.origin}${result.url}`);
+      setInviteId(result.id);
+    } catch (error) {
+      console.error('Failed to refresh invite:', error);
     }
   }
 
@@ -266,7 +278,7 @@ export default function MovieNight() {
                   </button>
                 </>
               )}
-              {!user.isLocalInvite && (
+              {!user.isLocalInvite && night.sharingEnabled && (
                 <button
                   onClick={handleCreateInvite}
                   className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors active:scale-95"
@@ -695,7 +707,9 @@ export default function MovieNight() {
       {showInvite && (
         <InviteModal
           inviteUrl={inviteUrl}
+          inviteId={inviteId}
           onClose={() => setShowInvite(false)}
+          onRefresh={handleRefreshInvite}
         />
       )}
 

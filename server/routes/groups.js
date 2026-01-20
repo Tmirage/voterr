@@ -77,6 +77,7 @@ router.get('/:id', requireNonGuest, (req, res) => {
     description: group.description,
     imageUrl: group.image_url,
     maxVotesPerUser: group.max_votes_per_user,
+    sharingEnabled: group.sharing_enabled !== 0,
     createdAt: group.created_at,
     members: members.map(m => ({
       id: m.id,
@@ -156,7 +157,7 @@ router.delete('/:id/members/:userId', requireNonGuest, (req, res) => {
 
 router.patch('/:id', requireNonGuest, (req, res) => {
   const { id } = req.params;
-  const { name, description, imageUrl, maxVotesPerUser } = req.body;
+  const { name, description, imageUrl, maxVotesPerUser, sharingEnabled } = req.body;
 
   if (!isGroupAdmin(req.session, id)) {
     return res.status(403).json({ error: 'Only group admins can update the group' });
@@ -171,9 +172,14 @@ router.patch('/:id', requireNonGuest, (req, res) => {
   }
 
   const votes = maxVotesPerUser !== undefined ? Math.max(1, Math.min(10, parseInt(maxVotesPerUser))) : null;
+  const sharing = sharingEnabled !== undefined ? (sharingEnabled ? 1 : 0) : null;
   
-  if (votes !== null) {
+  if (votes !== null && sharing !== null) {
+    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, sharing, id);
+  } else if (votes !== null) {
     db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, max_votes_per_user = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, votes, id);
+  } else if (sharing !== null) {
+    db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ?, sharing_enabled = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, sharing, id);
   } else {
     db.prepare('UPDATE groups SET name = ?, description = ?, image_url = ? WHERE id = ?').run(name.trim(), description || null, imageUrl || null, id);
   }
