@@ -10,6 +10,7 @@ import MovieNight from './pages/MovieNight';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import GuestJoin from './pages/GuestJoin';
+import PlexLoading from './pages/PlexLoading';
 
 function ProtectedRoute({ children }) {
   const { user, loading, setupComplete } = useAuth();
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/setup" element={<SetupRoute><Setup /></SetupRoute>} />
       <Route path="/login" element={<LoginRoute><Login /></LoginRoute>} />
       <Route path="/join/:token" element={<GuestJoin />} />
+      <Route path="/plex-loading" element={<PlexLoading />} />
       <Route
         path="/*"
         element={

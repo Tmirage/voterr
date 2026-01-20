@@ -32,9 +32,16 @@ export default function Setup() {
   async function handlePlexLogin() {
     setError(null);
     try {
-      const { authUrl } = await api.post('/setup/plex-auth');
-      const popup = window.open(authUrl, '_blank', 'width=600,height=700');
+      // Open local loading page first (not blocked by popup blockers on mobile)
+      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
       setPlexPopup(popup);
+      
+      const { authUrl } = await api.post('/setup/plex-auth');
+      
+      // Redirect popup to Plex auth URL
+      if (popup && !popup.closed) {
+        popup.location.href = authUrl;
+      }
       setPolling(true);
     } catch (err) {
       setError(err.message);

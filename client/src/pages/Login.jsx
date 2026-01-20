@@ -20,9 +20,16 @@ export default function Login() {
   async function handlePlexLogin() {
     setLoading(true);
     try {
-      const { authUrl } = await loginWithPlex();
-      const popup = window.open(authUrl, '_blank', 'width=600,height=700');
+      // Open local loading page first (not blocked by popup blockers on mobile)
+      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
       setPlexPopup(popup);
+      
+      const { authUrl } = await loginWithPlex();
+      
+      // Redirect popup to Plex auth URL
+      if (popup && !popup.closed) {
+        popup.location.href = authUrl;
+      }
       setPolling(true);
     } catch (error) {
       console.error('Failed to start Plex login:', error);
