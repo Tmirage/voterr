@@ -190,12 +190,12 @@ router.post('/complete', async (req, res) => {
 
     setSettings(settings);
 
-    let user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin FROM users WHERE plex_id = ?').get(plexUser.id.toString());
+    let user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin FROM users WHERE plex_id = ?').get(plexUser.id.toString());
 
     if (!user) {
       const result = db.prepare(`
-        INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin)
-        VALUES (?, ?, ?, ?, ?, 1)
+        INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin, is_app_admin)
+        VALUES (?, ?, ?, ?, ?, 1, 1)
       `).run(
         plexUser.id.toString(),
         plexToken,
@@ -204,16 +204,17 @@ router.post('/complete', async (req, res) => {
         plexUser.thumb
       );
 
-      user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin FROM users WHERE id = ?').get(result.lastInsertRowid);
+      user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin FROM users WHERE id = ?').get(result.lastInsertRowid);
     } else {
       db.prepare(`
-        UPDATE users SET plex_token = ?, is_admin = 1, updated_at = datetime('now')
+        UPDATE users SET plex_token = ?, is_admin = 1, is_app_admin = 1, updated_at = datetime('now')
         WHERE id = ?
       `).run(plexToken, user.id);
     }
 
     req.session.userId = user.id;
     req.session.isAdmin = true;
+    req.session.isAppAdmin = true;
 
     delete req.session.setupPlexPinId;
     delete req.session.setupPlexCode;
