@@ -10,9 +10,9 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install ALL dependencies for building
+# Install ALL dependencies for building (regenerate lock for platform)
 RUN npm ci
-RUN cd client && npm ci
+RUN cd client && rm -f package-lock.json && npm install
 
 # Copy source code
 COPY . .
