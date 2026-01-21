@@ -4,6 +4,7 @@ import db from '../db/index.js';
 import { requireAuth, requireNonGuest } from '../middleware/auth.js';
 import { getProxiedImageUrl } from '../services/imageCache.js';
 import { isGroupMember, isGroupAdmin } from '../utils/permissions.js';
+import { logger } from '../services/logger.js';
 
 const router = Router();
 
@@ -58,6 +59,7 @@ function rateLimit(req, res, next) {
   const check = checkPinRateLimit(ip);
   
   if (!check.allowed) {
+    logger.warn('invites', 'Rate limit exceeded', { ip, remainingSeconds: check.remainingSeconds }, req);
     return res.status(429).json({ error: `Too many attempts. Try again in ${check.remainingSeconds} seconds.` });
   }
   
@@ -168,7 +170,43 @@ router.post('/refresh/:id', requireNonGuest, (req, res) => {
   });
 });
 
-router.get('/validate/:token', rateLimit, (req, res) => {
+const tokenValidateMap = new Map();
+const TOKEN_VALIDATE_LIMIT = 20;
+const TOKEN_VALIDATE_WINDOW = 60000;
+
+function tokenValidateRateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!tokenValidateMap.has(ip)) {
+    tokenValidateMap.set(ip, { count: 1, resetAt: now + TOKEN_VALIDATE_WINDOW });
+    return next();
+  }
+  
+  const entry = tokenValidateMap.get(ip);
+  if (now > entry.resetAt) {
+    entry.count = 1;
+    entry.resetAt = now + TOKEN_VALIDATE_WINDOW;
+    return next();
+  }
+  
+  entry.count++;
+  if (entry.count > TOKEN_VALIDATE_LIMIT) {
+    logger.warn('invites', 'Token validation rate limit exceeded', { ip }, req);
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+  
+  next();
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of tokenValidateMap) {
+    if (now > entry.resetAt) tokenValidateMap.delete(ip);
+  }
+}, 300000);
+
+router.get('/validate/:token', tokenValidateRateLimit, rateLimit, (req, res) => {
   const { token } = req.params;
   const { pin } = req.query;
 
@@ -212,6 +250,7 @@ router.get('/validate/:token', rateLimit, (req, res) => {
     if (pin !== invite.invite_pin) {
       const ip = req.ip || req.connection.remoteAddress;
       recordPinFailure(ip);
+      logger.warn('invites', 'Invalid PIN attempt', { token: token.substring(0, 8) + '...', groupName: invite.group_name }, req);
       return res.status(401).json({ error: 'Invalid PIN' });
     }
     clearPinFailures(req.ip || req.connection.remoteAddress);
@@ -311,6 +350,8 @@ router.post('/local-join', rateLimit, (req, res) => {
   req.session.isLocalInvite = true;
   req.session.localInviteMovieNightId = invite.movie_night_id;
 
+  logger.info('invites', 'Local user joined via invite', { username: user.username, movieNightId: invite.movie_night_id }, req);
+
   res.json({
     success: true,
     user: {
@@ -353,6 +394,9 @@ router.post('/plex-join', requireAuth, (req, res) => {
       VALUES (?, ?, 'member')
     `).run(invite.group_id, req.session.userId);
   }
+
+  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.session.userId);
+  logger.info('invites', 'Plex user joined via invite', { username: user?.username, movieNightId: invite.movie_night_id }, req);
 
   res.json({
     success: true,

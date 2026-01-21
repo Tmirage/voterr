@@ -30,8 +30,9 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function loginWithPlex() {
-    const data = await api.get('/auth/plex');
+  async function loginWithPlex(forwardUrl = null) {
+    const url = forwardUrl ? `/auth/plex?forwardUrl=${encodeURIComponent(forwardUrl)}` : '/auth/plex';
+    const data = await api.get(url);
     return data;
   }
 

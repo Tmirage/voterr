@@ -93,8 +93,14 @@ export default function Users() {
   async function saveEditUser() {
     if (!editForm.username.trim()) return;
     try {
-      await api.patch(`/users/${editingUser.id}`, editForm);
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, username: editForm.username.trim(), email: editForm.email || null } : u));
+      const payload = editingUser.isLocal 
+        ? { username: editForm.username, email: editForm.email }
+        : { username: editForm.username };
+      await api.patch(`/users/${editingUser.id}`, payload);
+      setUsers(users.map(u => u.id === editingUser.id 
+        ? { ...u, username: editForm.username.trim(), email: editingUser.isLocal ? (editForm.email?.trim() || null) : u.email } 
+        : u
+      ));
       setEditingUser(null);
     } catch (error) {
       console.error('Failed to update user:', error);
@@ -144,50 +150,53 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl text-white">Users</h1>
-          <p className="text-gray-400">Manage Plex and local users</p>
+          <p className="text-gray-400 text-sm">Manage Plex and local users</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={loadPlexFriends}
-            className="flex items-center gap-2 px-4 py-2 bg-[#e5a00d] hover:bg-[#cc8f0c] text-black rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-[#e5a00d] hover:bg-[#cc8f0c] text-black rounded-lg transition-colors text-sm"
           >
-            <Download className="h-5 w-5" />
-            Import Plex
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Import</span> Plex
           </button>
           <button
             onClick={() => setShowAddLocal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm"
           >
-            <UserPlus className="h-5 w-5" />
-            Add Local
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add</span> Local
           </button>
         </div>
       </div>
 
-      <div className="bg-gray-800 rounded-xl p-4 mb-6">
-        <p className="text-sm text-gray-300 mb-3">User roles and types:</p>
-        <div className="grid grid-cols-2 gap-3 text-xs">
+      <details className="bg-gray-800 rounded-xl mb-6 group">
+        <summary className="p-4 cursor-pointer text-sm text-gray-300 list-none flex items-center justify-between">
+          <span>User roles and types</span>
+          <span className="text-gray-500 text-xs group-open:hidden">tap to expand</span>
+        </summary>
+        <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="flex items-start gap-2">
             <span className="px-1.5 py-0.5 rounded bg-purple-600/30 text-purple-300 shrink-0">App Admin</span>
-            <span className="text-gray-400">The Plex account that registered Voterr. Full control over all settings and users.</span>
+            <span className="text-gray-400">Full control over settings and users.</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="px-1.5 py-0.5 rounded bg-indigo-600/30 text-indigo-300 shrink-0">Admin</span>
-            <span className="text-gray-400">Can manage groups and movie nights. Assigned by App Admin.</span>
+            <span className="text-gray-400">Can manage groups and movie nights.</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="px-1.5 py-0.5 rounded bg-orange-600/30 text-orange-300 shrink-0">Plex</span>
-            <span className="text-gray-400">Imported from your Plex friends. Can login with their Plex account.</span>
+            <span className="text-gray-400">Login with Plex account.</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="px-1.5 py-0.5 rounded bg-gray-600/50 text-gray-400 shrink-0">Local</span>
-            <span className="text-gray-400">Manually created accounts. Need an invite link to vote on a movie night.</span>
+            <span className="text-gray-400">Need invite link to vote.</span>
           </div>
         </div>
-      </div>
+      </details>
 
       <div className="bg-gray-800 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700">
@@ -196,22 +205,57 @@ export default function Users() {
 
         <div className="divide-y divide-gray-700">
           {users.map((u) => (
-            <div key={u.id} className="px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div key={u.id} className="px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
                 {u.avatarUrl ? (
                   <img
                     src={u.avatarUrl}
                     alt={u.username}
-                    className="h-10 w-10 rounded-full"
+                    className="h-8 w-8 sm:h-10 sm:w-10 rounded-full shrink-0"
                   />
                 ) : (
-                  <div className="h-10 w-10 rounded-full bg-gray-600 flex items-center justify-center text-white">
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gray-600 flex items-center justify-center text-white text-sm shrink-0">
                     {u.username[0].toUpperCase()}
                   </div>
                 )}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-white">{u.username}</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                    {editingUser?.id === u.id && !u.isLocal ? (
+                      <form onSubmit={(e) => { e.preventDefault(); saveEditUser(); }} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editForm.username}
+                          onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                          className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-indigo-500 w-32"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelEditUser();
+                            }
+                          }}
+                        />
+                        <button type="submit" className="p-1 text-green-400 hover:text-green-300">
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={cancelEditUser} className="p-1 text-gray-400 hover:text-gray-300">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </form>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <p className="text-white">{u.username}</p>
+                        {(user.isAppAdmin || u.id === user.id) && (
+                          <button
+                            onClick={() => startEditUser(u)}
+                            className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
+                            title={u.isLocal ? "Edit user" : "Edit display name"}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </span>
+                    )}
                     {u.isAppAdmin && (
                       <span className="px-1.5 py-0.5 text-xs rounded bg-purple-600/30 text-purple-300">App Admin</span>
                     )}
@@ -230,43 +274,36 @@ export default function Users() {
                   </div>
                 </div>
               </div>
-              {user.isAppAdmin && u.id !== user.id && !u.isAppAdmin && (
-                <div className="flex items-center gap-1">
-                  {u.isLocal && (
+              <div className="flex items-center shrink-0">
+                {user.isAppAdmin && u.id !== user.id && !u.isAppAdmin && (
+                  <>
+                    {!u.isLocal && (
+                      <button
+                        onClick={() => handleToggleAdmin(u.id)}
+                        className={clsx(
+                          "p-1.5 sm:p-2 transition-colors",
+                          u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
+                        )}
+                        title={u.isAdmin ? "Remove admin" : "Make admin"}
+                      >
+                        {u.isAdmin ? <Shield className="h-4 w-4 sm:h-5 sm:w-5" /> : <ShieldOff className="h-4 w-4 sm:h-5 sm:w-5" />}
+                      </button>
+                    )}
                     <button
-                      onClick={() => startEditUser(u)}
-                      className="p-2 text-gray-400 hover:text-gray-300 transition-colors"
-                      title="Edit user"
+                      onClick={() => handleDelete(u.id)}
+                      className="p-1.5 sm:p-2 text-gray-400 hover:text-red-400 transition-colors"
                     >
-                      <Pencil className="h-5 w-5" />
+                      <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
-                  )}
-                  {!u.isLocal && (
-                    <button
-                      onClick={() => handleToggleAdmin(u.id)}
-                      className={clsx(
-                        "p-2 transition-colors",
-                        u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
-                      )}
-                      title={u.isAdmin ? "Remove admin" : "Make admin"}
-                    >
-                      {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDelete(u.id)}
-                    className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {editingUser && (
+      {editingUser?.isLocal && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onKeyDown={(e) => {
@@ -277,7 +314,7 @@ export default function Users() {
           }}
         >
           <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl text-white mb-4">Edit User</h2>
+            <h2 className="text-xl text-white mb-4">Edit Local User</h2>
             <form onSubmit={(e) => { e.preventDefault(); saveEditUser(); }} className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Username</label>

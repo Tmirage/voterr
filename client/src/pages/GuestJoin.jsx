@@ -2,28 +2,49 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import PlexOAuth from '../lib/plexOAuth';
 import { Film, Calendar, Clock, Users, Trophy, XCircle, Lock } from 'lucide-react';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format, parseISO } from 'date-fns';
 
+const plexOAuth = new PlexOAuth();
+
 export default function GuestJoin() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { setUser, loginWithPlex, checkPlexAuth } = useAuth();
+  const { setUser } = useAuth();
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [joining, setJoining] = useState(false);
   const [plexLoading, setPlexLoading] = useState(false);
-  const [polling, setPolling] = useState(false);
-  const [plexPopup, setPlexPopup] = useState(null);
   const [requiresPin, setRequiresPin] = useState(false);
   const [pinGroupInfo, setPinGroupInfo] = useState(null);
   const [pin, setPin] = useState(['', '', '', '', '', '']);
   const [pinError, setPinError] = useState(null);
   const [pinLoading, setPinLoading] = useState(false);
   const pinRefs = useRef([]);
+
+  // Check for pending Plex auth (mobile redirect flow)
+  useEffect(() => {
+    async function checkPendingAuth() {
+      try {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setPlexLoading(true);
+          await api.post('/auth/plex', { authToken });
+          await api.post('/invites/plex-join', { token });
+          navigate(`/movie-night/${invite?.movieNightId}`);
+        }
+      } catch (err) {
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+        setPlexLoading(false);
+      }
+    }
+    checkPendingAuth();
+  }, [token, invite]);
 
   useEffect(() => {
     validateInvite();
@@ -100,49 +121,25 @@ export default function GuestJoin() {
 
   async function handlePlexLogin() {
     setPlexLoading(true);
-    try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
-      
-      const { authUrl } = await loginWithPlex();
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
-      }
-      setPolling(true);
-    } catch (err) {
-      console.error('Failed to start Plex login:', err);
-      setPlexLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!polling || !invite) return;
-
-    const interval = setInterval(async () => {
+    
+    plexOAuth.preparePopup();
+    
+    setTimeout(async () => {
       try {
-        const result = await checkPlexAuth();
-        if (result.authenticated) {
-          setPolling(false);
-          setPlexLoading(false);
-          if (plexPopup && !plexPopup.closed) {
-            plexPopup.close();
-          }
-          setPlexPopup(null);
-          
-          // Join the group via invite after Plex login
-          await api.post('/invites/plex-join', { token });
-          navigate(`/movie-night/${invite.movieNightId}`);
-        }
+        const forwardUrl = window.location.origin + `/join/${token}`;
+        const authToken = await plexOAuth.login(forwardUrl);
+        await api.post('/auth/plex', { authToken });
+        await api.post('/invites/plex-join', { token });
+        navigate(`/movie-night/${invite.movieNightId}`);
       } catch (err) {
-        console.error('Auth check failed:', err);
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          console.error('Failed to start Plex login:', err);
+          setError(err.message);
+        }
+        setPlexLoading(false);
       }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [polling, checkPlexAuth, navigate, plexPopup, invite, token]);
+    }, 1500);
+  }
 
   async function handleLocalJoin() {
     if (!selectedUserId) return;
@@ -350,7 +347,7 @@ export default function GuestJoin() {
             {plexLoading ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                {polling ? 'Waiting for Plex...' : 'Connecting...'}
+                Waiting for Plex...
               </>
             ) : (
               <>

@@ -45,42 +45,35 @@ router.get('/status', (req, res) => {
   });
 });
 
+// Accept authToken directly from client-side OAuth
 router.post('/plex-auth', rateLimit, async (req, res) => {
   if (isSetupComplete()) {
     return res.status(403).json({ error: 'Setup already complete' });
   }
   
   try {
-    const response = await fetch('https://plex.tv/api/v2/pins', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
-        'X-Plex-Product': 'Voterr',
-        'X-Plex-Version': '1.0.0',
-        'X-Plex-Platform': 'Web'
-      },
-      body: JSON.stringify({ strong: true })
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Plex pin error:', response.status, text);
-      throw new Error('Failed to create Plex pin');
+    const { authToken } = req.body;
+    
+    if (!authToken) {
+      return res.status(400).json({ error: 'Authentication token required' });
     }
 
-    const data = await response.json();
-    
-    req.session.setupPlexPinId = data.id;
-    req.session.setupPlexCode = data.code;
+    const plexUser = await getPlexUser(authToken);
 
-    const authUrl = `https://app.plex.tv/auth#?clientID=${PLEX_CLIENT_ID}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
+    req.session.setupPlexToken = authToken;
+    req.session.setupPlexUser = {
+      id: plexUser.id,
+      username: plexUser.username,
+      email: plexUser.email,
+      thumb: plexUser.thumb
+    };
 
     res.json({
-      pinId: data.id,
-      code: data.code,
-      authUrl
+      user: {
+        username: plexUser.username,
+        email: plexUser.email,
+        thumb: plexUser.thumb
+      }
     });
   } catch (error) {
     console.error('Setup Plex auth error:', error);
@@ -157,7 +150,8 @@ router.post('/complete', async (req, res) => {
 
     if (overseerrUrl && overseerrApiKey) {
       try {
-        const overseerrTest = await fetch(`${overseerrUrl}/api/v1/status`, {
+        // Use /settings/main which requires valid API key, not /status which is public
+        const overseerrTest = await fetch(`${overseerrUrl}/api/v1/settings/main`, {
           headers: { 'X-Api-Key': overseerrApiKey }
         });
         if (!overseerrTest.ok) {

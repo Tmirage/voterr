@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -24,7 +25,9 @@ import setupRoutesHandler from './routes/setup.js';
 import settingsRoutes from './routes/settings.js';
 import imagesRoutes from './routes/images.js';
 import dashboardRoutes from './routes/dashboard.js';
+import logsRoutes from './routes/logs.js';
 import { generateCsrfToken, csrfProtection } from './middleware/csrf.js';
+import { initLogsTable, logger } from './services/logger.js';
 import SqliteStore from 'better-sqlite3-session-store';
 
 dotenv.config();
@@ -46,6 +49,11 @@ if (hasBuiltClient) {
 app.use(cors({
   origin: hasBuiltClient ? false : true,
   credentials: true
+}));
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
 
 app.use(express.json());
@@ -109,6 +117,7 @@ function setupRoutes() {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/images', imagesRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/logs', logsRoutes);
 }
 
 app.get('/api/health', (req, res) => {
@@ -199,6 +208,7 @@ app.get('/join/:token', (req, res) => {
 async function start() {
   try {
     await initDatabase();
+    initLogsTable();
     setupRoutes();
     
     // Wildcard route MUST be registered AFTER API routes

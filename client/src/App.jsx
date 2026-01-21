@@ -9,6 +9,7 @@ import GroupDetail from './pages/GroupDetail';
 import MovieNight from './pages/MovieNight';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
+import Logs from './pages/Logs';
 import GuestJoin from './pages/GuestJoin';
 import PlexLoading from './pages/PlexLoading';
 
@@ -102,6 +103,7 @@ export default function App() {
                 <Route path="/movie-night/:id" element={<MovieNight />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/logs" element={<Logs />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

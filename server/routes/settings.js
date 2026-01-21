@@ -42,7 +42,8 @@ router.post('/test/overseerr', requireAdminOrSetup, async (req, res) => {
   }
 
   try {
-    const response = await fetch(`${url}/api/v1/status`, {
+    // Use /settings/main which requires auth, not /status which is public
+    const response = await fetch(`${url}/api/v1/settings/main`, {
       headers: { 'X-Api-Key': apiKey }
     });
 
@@ -50,8 +51,11 @@ router.post('/test/overseerr', requireAdminOrSetup, async (req, res) => {
       return res.status(400).json({ error: 'Failed to connect. Check URL and API key.' });
     }
 
-    const data = await response.json();
-    res.json({ success: true, version: data.version });
+    // Also get version from status
+    const statusRes = await fetch(`${url}/api/v1/status`);
+    const statusData = await statusRes.json();
+    
+    res.json({ success: true, version: statusData.version });
   } catch (error) {
     res.status(400).json({ error: 'Failed to connect. Check URL.' });
   }

@@ -1,19 +1,18 @@
-# Build stage - only for compiling, nothing from here goes to production
+# Build stage - compiles native modules and frontend
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (better-sqlite3) and update npm
-RUN apk add --no-cache python3 make g++ && \
-    npm install -g npm@latest
+# Install build dependencies for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
 
 # Copy package files
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install ALL dependencies for building (regenerate lock for platform)
+# Install dependencies
 RUN npm ci
-RUN cd client && rm -f package-lock.json && npm install
+RUN cd client && npm ci
 
 # Copy source code
 COPY . .
@@ -21,51 +20,36 @@ COPY . .
 # Build frontend
 RUN cd client && npm run build
 
-# Production stage - clean image with only runtime dependencies
+# Production stage - minimal runtime image
 FROM node:22-alpine
 
 WORKDIR /app
 
-# Update Alpine packages to fix CVEs (busybox, zlib), install minimal runtime dependencies
+# Install minimal runtime dependencies, fix CVEs, and clean up
 RUN apk upgrade --no-cache && \
     apk add --no-cache --upgrade --repository=https://dl-cdn.alpinelinux.org/alpine/edge/main \
         busybox zlib && \
-    apk add --no-cache tini libstdc++ su-exec
+    apk add --no-cache tini libstdc++ su-exec && \
+    rm -rf /var/cache/apk/*
 
-# Copy only package files first
+# Copy package files and install production deps
 COPY package*.json ./
-
-# Install production dependencies fresh, then copy prebuilt better-sqlite3 from builder
 RUN npm ci --omit=dev --ignore-scripts && \
-    rm -rf node_modules/better-sqlite3 && \
-    npm cache clean --force
+    rm -rf node_modules/better-sqlite3 ~/.npm
 
 # Copy prebuilt better-sqlite3 from builder (includes native binary)
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
-# Remove build-time only packages that contain CVEs (tar, prebuild-install, etc)
-# Also remove npm and apk (CVE-2026-23745 tar, CVE-2026-22184 zlib) - not needed at runtime
-RUN rm -rf node_modules/prebuild-install node_modules/tar node_modules/tar-fs node_modules/tar-stream \
-           node_modules/node-abi node_modules/napi-build-utils node_modules/detect-libc \
-           node_modules/expand-template node_modules/github-from-package node_modules/mkdirp-classic \
-           node_modules/simple-get node_modules/simple-concat node_modules/decompress-response \
-           node_modules/mimic-response node_modules/tunnel-agent node_modules/minipass \
-           node_modules/minizlib node_modules/yallist node_modules/chownr node_modules/fs-minipass \
-           /usr/local/lib/node_modules/npm \
-           /sbin/apk /usr/share/apk /etc/apk /lib/apk /var/cache/apk
-
-# Copy built frontend from builder
+# Copy built frontend and server code
 COPY --from=builder /app/client/dist ./client/dist
-
-# Copy server code
 COPY --from=builder /app/server ./server
 
-# Copy entrypoint script
+# Copy entrypoint script and setup
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh && mkdir -p /app/data
 
-# Create data directory
-RUN mkdir -p /app/data
+# Cleanup npm (not needed at runtime)
+RUN rm -rf /usr/local/lib/node_modules/npm
 
 ENV NODE_ENV=production
 ENV PUID=1000

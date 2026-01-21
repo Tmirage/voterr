@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+import PlexOAuth from '../lib/plexOAuth';
 import { Film, Check, ChevronRight, Server, Database, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
+
+const plexOAuth = new PlexOAuth();
 
 const STEPS = [
   { id: 'plex', title: 'Plex Account', description: 'Connect your Plex media server' },
@@ -16,7 +19,6 @@ export default function Setup() {
   const { setUser, setSetupComplete } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [plexUser, setPlexUser] = useState(null);
-  const [polling, setPolling] = useState(false);
   const [config, setConfig] = useState({
     overseerrUrl: '',
     overseerrApiKey: '',
@@ -25,51 +27,53 @@ export default function Setup() {
   });
   const [error, setError] = useState(null);
   const [completing, setCompleting] = useState(false);
-  const [plexPopup, setPlexPopup] = useState(null);
+  const [plexLoading, setPlexLoading] = useState(false);
   const [testing, setTesting] = useState({ overseerr: false, tautulli: false });
   const [testResult, setTestResult] = useState({ overseerr: null, tautulli: null });
 
-  async function handlePlexLogin() {
-    setError(null);
-    try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
-      
-      const { authUrl } = await api.post('/setup/plex-auth');
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
-      }
-      setPolling(true);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
+  // Check for pending Plex auth (mobile redirect flow)
   useEffect(() => {
-    if (!polling) return;
-
-    const interval = setInterval(async () => {
+    async function checkPendingAuth() {
       try {
-        const result = await api.get('/setup/plex-auth/check');
-        if (result.authenticated) {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setPlexLoading(true);
+          const result = await api.post('/setup/plex-auth', { authToken });
           setPlexUser(result.user);
-          setPolling(false);
-          if (plexPopup && !plexPopup.closed) {
-            plexPopup.close();
-          }
-          setPlexPopup(null);
           setCurrentStep(1);
+          setPlexLoading(false);
         }
       } catch (err) {
-        console.error('Auth check failed:', err);
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+        setPlexLoading(false);
       }
-    }, 2000);
+    }
+    checkPendingAuth();
+  }, []);
 
-    return () => clearInterval(interval);
-  }, [polling, plexPopup]);
+  async function handlePlexLogin() {
+    setError(null);
+    setPlexLoading(true);
+    
+    plexOAuth.preparePopup();
+    
+    setTimeout(async () => {
+      try {
+        const forwardUrl = window.location.origin + '/setup';
+        const authToken = await plexOAuth.login(forwardUrl);
+        const result = await api.post('/setup/plex-auth', { authToken });
+        setPlexUser(result.user);
+        setCurrentStep(1);
+      } catch (err) {
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          setError(err.message);
+        }
+      } finally {
+        setPlexLoading(false);
+      }
+    }, 1500);
+  }
 
   async function handleComplete() {
     setError(null);
@@ -201,10 +205,10 @@ export default function Setup() {
               ) : (
                 <button
                   onClick={handlePlexLogin}
-                  disabled={polling}
+                  disabled={plexLoading}
                   className="w-full flex items-center justify-center gap-3 bg-[#e5a00d] hover:bg-[#cc8f0c] disabled:opacity-50 text-black py-3 px-4 rounded-lg transition-colors"
                 >
-                  {polling ? (
+                  {plexLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-2 border-black border-t-transparent" />
                       Waiting for Plex...

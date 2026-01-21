@@ -1,13 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
+import PlexOAuth from '../lib/plexOAuth';
 import { Film } from 'lucide-react';
 
+const plexOAuth = new PlexOAuth();
+
 export default function Login() {
-  const { user, loginWithPlex, checkPlexAuth } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [polling, setPolling] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Check for pending Plex auth (mobile redirect flow)
+  useEffect(() => {
+    async function checkPendingAuth() {
+      try {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setLoading(true);
+          const userData = await api.post('/auth/plex', { authToken });
+          setUser(userData);
+          navigate('/');
+        }
+      } catch (err) {
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+      }
+    }
+    checkPendingAuth();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -15,50 +38,33 @@ export default function Login() {
     }
   }, [user, navigate]);
 
-  const [plexPopup, setPlexPopup] = useState(null);
-
   async function handlePlexLogin() {
     setLoading(true);
-    try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
-      
-      const { authUrl } = await loginWithPlex();
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
-      }
-      setPolling(true);
-    } catch (error) {
-      console.error('Failed to start Plex login:', error);
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!polling) return;
-
-    const interval = setInterval(async () => {
+    setError(null);
+    
+    // Prepare popup (only opens on desktop)
+    plexOAuth.preparePopup();
+    
+    // Wait 1.5s then start OAuth flow
+    setTimeout(async () => {
       try {
-        const result = await checkPlexAuth();
-        if (result.authenticated) {
-          setPolling(false);
-          setLoading(false);
-          if (plexPopup && !plexPopup.closed) {
-            plexPopup.close();
-          }
-          setPlexPopup(null);
-          navigate('/');
+        // Pass forwardUrl for mobile redirect flow
+        const forwardUrl = window.location.origin + '/login';
+        const authToken = await plexOAuth.login(forwardUrl);
+        
+        // This only runs on desktop (mobile redirects away)
+        const userData = await api.post('/auth/plex', { authToken });
+        setUser(userData);
+        navigate('/');
+      } catch (err) {
+        console.error('Plex login failed:', err);
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          setError(err.message || 'Login failed');
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
+        setLoading(false);
       }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [polling, checkPlexAuth, navigate, plexPopup]);
+    }, 1500);
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
@@ -82,7 +88,7 @@ export default function Login() {
             {loading ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-black border-t-transparent" />
-                {polling ? 'Waiting for Plex...' : 'Connecting...'}
+                Waiting for Plex...
               </>
             ) : (
               <>
