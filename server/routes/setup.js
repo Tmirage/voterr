@@ -45,64 +45,35 @@ router.get('/status', (req, res) => {
   });
 });
 
+// Accept authToken directly from client-side OAuth
 router.post('/plex-auth', rateLimit, async (req, res) => {
   if (isSetupComplete()) {
     return res.status(403).json({ error: 'Setup already complete' });
   }
   
   try {
-    // Validate forwardUrl to prevent open redirect attacks
-    let forwardUrl = null;
-    if (req.body.forwardUrl) {
-      try {
-        const url = new URL(req.body.forwardUrl);
-        const origin = req.get('origin') || req.get('referer');
-        if (origin) {
-          const originUrl = new URL(origin);
-          // Only allow redirect to same origin
-          if (url.origin === originUrl.origin) {
-            forwardUrl = req.body.forwardUrl;
-          }
-        }
-      } catch (e) {
-        // Invalid URL, ignore
-      }
-    }
+    const { authToken } = req.body;
     
-    const response = await fetch('https://plex.tv/api/v2/pins', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-Plex-Client-Identifier': PLEX_CLIENT_ID,
-        'X-Plex-Product': 'Voterr',
-        'X-Plex-Version': '1.0.0',
-        'X-Plex-Platform': 'Web'
-      },
-      body: JSON.stringify({ strong: true })
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Plex pin error:', response.status, text);
-      throw new Error('Failed to create Plex pin');
+    if (!authToken) {
+      return res.status(400).json({ error: 'Authentication token required' });
     }
 
-    const data = await response.json();
-    
-    req.session.setupPlexPinId = data.id;
-    req.session.setupPlexCode = data.code;
+    const plexUser = await getPlexUser(authToken);
 
-    let authUrl = `https://app.plex.tv/auth#?clientID=${PLEX_CLIENT_ID}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
-    
-    if (forwardUrl) {
-      authUrl += `&forwardUrl=${encodeURIComponent(forwardUrl)}`;
-    }
+    req.session.setupPlexToken = authToken;
+    req.session.setupPlexUser = {
+      id: plexUser.id,
+      username: plexUser.username,
+      email: plexUser.email,
+      thumb: plexUser.thumb
+    };
 
     res.json({
-      pinId: data.id,
-      code: data.code,
-      authUrl
+      user: {
+        username: plexUser.username,
+        email: plexUser.email,
+        thumb: plexUser.thumb
+      }
     });
   } catch (error) {
     console.error('Setup Plex auth error:', error);

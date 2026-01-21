@@ -184,6 +184,77 @@ router.get('/me', (req, res) => {
   });
 });
 
+// New endpoint: accept authToken directly from client-side OAuth
+router.post('/plex', async (req, res) => {
+  try {
+    const { authToken } = req.body;
+    
+    if (!authToken) {
+      return res.status(400).json({ error: 'Authentication token required' });
+    }
+
+    const plexUser = await getPlexUser(authToken);
+
+    let user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin, is_local FROM users WHERE plex_id = ?').get(plexUser.id.toString());
+
+    if (!user) {
+      const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+      const isFirstUser = userCount.count === 0;
+      
+      if (!isFirstUser) {
+        const adminToken = getSetting('plex_token');
+        if (adminToken) {
+          const friends = await getPlexFriends(adminToken);
+          const isFriend = friends.some(f => f.id === plexUser.id.toString());
+          
+          if (!isFriend) {
+            logger.warn('auth', 'Access denied - not a Plex friend', { plexId: plexUser.id, username: plexUser.username }, req);
+            return res.status(403).json({ error: 'Access denied. You must be a Plex friend of the server owner.' });
+          }
+        }
+      }
+      
+      const result = db.prepare(`
+        INSERT INTO users (plex_id, plex_token, username, email, avatar_url, is_admin, is_app_admin)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        plexUser.id.toString(),
+        authToken,
+        plexUser.username,
+        plexUser.email,
+        plexUser.thumb,
+        isFirstUser ? 1 : 0,
+        isFirstUser ? 1 : 0
+      );
+
+      user = db.prepare('SELECT id, plex_id, username, email, avatar_url, is_admin, is_app_admin, is_local FROM users WHERE id = ?').get(result.lastInsertRowid);
+    } else {
+      db.prepare(`
+        UPDATE users SET plex_token = ?, username = ?, email = ?, avatar_url = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(authToken, plexUser.username, plexUser.email, plexUser.thumb, user.id);
+    }
+
+    req.session.userId = user.id;
+    req.session.isAdmin = user.is_admin === 1;
+    req.session.isAppAdmin = user.is_app_admin === 1;
+
+    logger.info('auth', 'User logged in', { userId: user.id, username: user.username }, req);
+
+    res.json({ 
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      avatarUrl: user.avatar_url,
+      isAdmin: user.is_admin === 1,
+      isAppAdmin: user.is_app_admin === 1
+    });
+  } catch (error) {
+    console.error('Plex auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
 router.post('/logout', (req, res) => {
   const userId = req.session.userId;
   logger.info('auth', 'User logged out', { userId }, req);
