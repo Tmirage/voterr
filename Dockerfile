@@ -44,14 +44,15 @@ RUN npm ci --omit=dev --ignore-scripts && \
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
 # Remove build-time only packages that contain CVEs (tar, prebuild-install, etc)
-# Also remove tar from global npm (CVE-2026-23745) - npm is no longer needed after install
+# Also remove npm and apk (CVE-2026-23745 tar, CVE-2026-22184 zlib) - not needed at runtime
 RUN rm -rf node_modules/prebuild-install node_modules/tar node_modules/tar-fs node_modules/tar-stream \
            node_modules/node-abi node_modules/napi-build-utils node_modules/detect-libc \
            node_modules/expand-template node_modules/github-from-package node_modules/mkdirp-classic \
            node_modules/simple-get node_modules/simple-concat node_modules/decompress-response \
            node_modules/mimic-response node_modules/tunnel-agent node_modules/minipass \
            node_modules/minizlib node_modules/yallist node_modules/chownr node_modules/fs-minipass \
-           /usr/local/lib/node_modules/npm
+           /usr/local/lib/node_modules/npm \
+           /sbin/apk /usr/share/apk /etc/apk /lib/apk /var/cache/apk
 
 # Copy built frontend from builder
 COPY --from=builder /app/client/dist ./client/dist

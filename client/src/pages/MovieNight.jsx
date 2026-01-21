@@ -224,10 +224,13 @@ export default function MovieNight() {
   
   return (
     <div className="space-y-6">
-      <div className="bg-gray-800 rounded-xl p-6">
+      <div className="bg-gray-800 rounded-xl p-4 sm:p-6">
+        {night.groupImageUrl && (
+          <img src={night.groupImageUrl} alt="" className="w-full h-32 sm:hidden rounded-xl object-cover mb-4" />
+        )}
         <div className="flex gap-4">
           {night.groupImageUrl && (
-            <img src={night.groupImageUrl} alt="" className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
+            <img src={night.groupImageUrl} alt="" className="hidden sm:block w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
           )}
           <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -436,31 +439,33 @@ export default function MovieNight() {
                 )}
               >
                 <div className="flex gap-4 md:gap-6">
-                  <div className="relative flex-shrink-0">
-                    {nomination.posterUrl ? (
-                      <img
-                        src={nomination.posterUrl}
-                        alt={nomination.title}
-                        className="w-28 sm:w-32 md:w-40 aspect-[2/3] object-cover rounded-xl shadow-lg"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="w-28 sm:w-32 md:w-40 aspect-[2/3] bg-gray-700 rounded-xl flex items-center justify-center">
-                        <Film className="h-12 w-12 text-gray-500" />
+                  <div className="flex-shrink-0 w-28 sm:w-32 md:w-40">
+                    <div className="relative">
+                      {nomination.posterUrl ? (
+                        <img
+                          src={nomination.posterUrl}
+                          alt={nomination.title}
+                          className="w-full aspect-[2/3] object-cover rounded-xl shadow-lg"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="w-full aspect-[2/3] bg-gray-700 rounded-xl flex items-center justify-center">
+                          <Film className="h-12 w-12 text-gray-500" />
+                        </div>
+                      )}
+                      <div className={clsx(
+                        "absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1",
+                        nomination.mediaType === 'plex' 
+                          ? "bg-black/60 text-orange-400" 
+                          : "bg-black/60 text-blue-400"
+                      )} style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+                        <span className={clsx(
+                          "w-1.5 h-1.5 rounded-full",
+                          nomination.mediaType === 'plex' ? "bg-orange-400" : "bg-blue-400"
+                        )} />
+                        {nomination.mediaType === 'plex' ? 'Plex' : 'TMDB'}
                       </div>
-                    )}
-                    <div className={clsx(
-                      "absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] inline-flex items-center gap-1",
-                      nomination.mediaType === 'plex' 
-                        ? "bg-black/60 text-orange-400" 
-                        : "bg-black/60 text-blue-400"
-                    )} style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
-                      <span className={clsx(
-                        "w-1.5 h-1.5 rounded-full",
-                        nomination.mediaType === 'plex' ? "bg-orange-400" : "bg-blue-400"
-                      )} />
-                      {nomination.mediaType === 'plex' ? 'Plex' : 'TMDB'}
                     </div>
                   </div>
 
@@ -601,6 +606,7 @@ export default function MovieNight() {
                           Pick Winner
                         </button>
                       )}
+
                     </div>
 
                     {nomination.votes.length > 0 && (
@@ -627,6 +633,17 @@ export default function MovieNight() {
                             )}
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {canNominate && (nomination.nominatedBy.id === user.id || night.canManage || user.isAppAdmin) && (
+                      <div className="flex justify-end mt-3">
+                        <button
+                          onClick={() => handleUnnominate(nomination.id)}
+                          className="px-2 py-0.5 text-xs bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded transition-colors"
+                        >
+                          Remove
+                        </button>
                       </div>
                     )}
                   </div>

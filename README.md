@@ -1,6 +1,14 @@
 # Voterr
 
+> **Note:** This project is currently in beta/work-in-progress. Features may change and bugs are expected. Feedback and contributions are welcome!
+
 A film voting platform for movie nights that integrates with your Plex ecosystem. Vote on movies, track who's watched what, and organize recurring movie nights with friends.
+
+## Screenshots
+
+| Dashboard | Group | Movie Night |
+|-----------|-------|-------------|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Group](docs/screenshots/group.png) | ![Movie Night](docs/screenshots/movie-night.png) |
 
 ## Features
 
@@ -24,18 +32,12 @@ A film voting platform for movie nights that integrates with your Plex ecosystem
 ## Quick Start
 
 ```bash
-docker run -d --name voterr -p 5056:5056 -v ./voterr-data:/app/data ghcr.io/tmirage/voterr:latest
+docker run -d --name voterr -p 5056:5056 -v ./voterr-data:/app/data tmirage/voterr:latest
 ```
 
 Open `http://localhost:5056` and complete the setup wizard to configure Plex and other services.
 
 ## Getting API Keys
-
-### Plex Token
-1. Sign in to Plex Web App
-2. Open any media item
-3. Click "Get Info" > "View XML"
-4. Find `X-Plex-Token` in the URL
 
 ### Tautulli API Key
 1. Go to Tautulli Settings
@@ -176,7 +178,7 @@ docker run -d \
   --name voterr \
   -p 5056:5056 \
   -v ./voterr-data:/app/data \
-  ghcr.io/tmirage/voterr:latest
+  tmirage/voterr:latest
 ```
 
 That's it! Open `http://localhost:5056` and complete the setup wizard to configure Plex and other services.
@@ -186,7 +188,7 @@ That's it! Open `http://localhost:5056` and complete the setup wizard to configu
 ```yaml
 services:
   voterr:
-    image: ghcr.io/tmirage/voterr:latest
+    image: tmirage/voterr:latest
     container_name: voterr
     restart: unless-stopped
     ports:

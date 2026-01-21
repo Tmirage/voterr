@@ -127,6 +127,27 @@ router.patch('/:id/admin', requireAdmin, (req, res) => {
   res.json({ success: true, isAdmin: newAdminStatus === 1 });
 });
 
+router.patch('/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { username, email } = req.body;
+
+  const user = db.prepare('SELECT id, is_local FROM users WHERE id = ?').get(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (!user.is_local) {
+    return res.status(400).json({ error: 'Only local users can be fully edited' });
+  }
+
+  if (!username || !username.trim()) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  db.prepare('UPDATE users SET username = ?, email = ? WHERE id = ?').run(username.trim(), email || null, id);
+  res.json({ success: true, username: username.trim(), email: email || null });
+});
+
 router.delete('/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
 

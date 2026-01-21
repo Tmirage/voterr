@@ -219,9 +219,12 @@ export default function Dashboard() {
             return (
               <div key={night.id} className="bg-gray-800 rounded-xl overflow-hidden">
                 <div className="p-4 md:p-6 border-b border-gray-700">
+                  {night.groupImageUrl && (
+                    <img src={night.groupImageUrl} alt="" className="w-full h-32 sm:hidden rounded-xl object-cover mb-4" />
+                  )}
                   <div className="flex gap-4">
                     {night.groupImageUrl && (
-                      <img src={night.groupImageUrl} alt="" className="w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
+                      <img src={night.groupImageUrl} alt="" className="hidden sm:block w-14 h-14 md:w-16 md:h-16 rounded-xl object-cover flex-shrink-0" />
                     )}
                     <div className="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
@@ -400,13 +403,13 @@ export default function Dashboard() {
                         )}
                       </div>
                     ) : (
-                      <AnimatedList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      <AnimatedList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {sortedNominations.map((nomination, index) => {
                           return (
                           <div
                             key={nomination.id}
                             className={clsx(
-                              "bg-gray-700/50 rounded-xl p-2 flex flex-col",
+                              "bg-gray-700/50 rounded-xl p-2 flex flex-col overflow-hidden min-w-0",
                               nomination.isLeading && "ring-2 ring-indigo-500"
                             )}
                           >
@@ -451,23 +454,23 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className="mt-2 flex-1">
-                              {nomination.ratingKey && plexServerId && !user.isLocal && !user.isLocalInvite ? (
-                                <Tooltip content="Open in Plex">
+                            <div className="mt-2 flex-1 min-w-0">
+                              <Tooltip content={nomination.title}>
+                                {nomination.ratingKey && plexServerId && !user.isLocal && !user.isLocalInvite ? (
                                   <a
                                     href={`https://app.plex.tv/desktop/#!/server/${plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${nomination.ratingKey}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-white hover:text-orange-500 transition-colors"
+                                    className="flex items-center gap-1 text-white hover:text-orange-500 transition-colors overflow-hidden"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <Play className="h-3 w-3 flex-shrink-0" />
                                     <span className="text-sm truncate">{nomination.title}</span>
                                   </a>
-                                </Tooltip>
-                              ) : (
-                                <p className="text-white text-sm truncate">{nomination.title}</p>
-                              )}
+                                ) : (
+                                  <p className="text-white text-sm truncate">{nomination.title}</p>
+                                )}
+                              </Tooltip>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={clsx(
                                   "px-2.5 py-1 rounded text-sm",
@@ -543,15 +546,12 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="px-4 md:px-6 py-3 bg-gray-700/30 border-t border-gray-700">
-                  <Link
-                    to={`/movie-night/${night.id}`}
-                    className="flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    View full details
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
+                <Link
+                  to={`/movie-night/${night.id}`}
+                  className="block px-4 md:px-6 py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border-t border-indigo-500/20 text-center text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  View full details →
+                </Link>
               </div>
             );
           })}
