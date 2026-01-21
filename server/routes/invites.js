@@ -350,6 +350,8 @@ router.post('/local-join', rateLimit, (req, res) => {
   req.session.isLocalInvite = true;
   req.session.localInviteMovieNightId = invite.movie_night_id;
 
+  logger.info('invites', 'Local user joined via invite', { username: user.username, movieNightId: invite.movie_night_id }, req);
+
   res.json({
     success: true,
     user: {
@@ -392,6 +394,9 @@ router.post('/plex-join', requireAuth, (req, res) => {
       VALUES (?, ?, 'member')
     `).run(invite.group_id, req.session.userId);
   }
+
+  const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.session.userId);
+  logger.info('invites', 'Plex user joined via invite', { username: user?.username, movieNightId: invite.movie_night_id }, req);
 
   res.json({
     success: true,

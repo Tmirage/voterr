@@ -20,7 +20,7 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-export async function getPlexAuthUrl(clientId) {
+export async function getPlexAuthUrl(clientId, forwardUrl = null) {
   const response = await fetchWithTimeout(`${PLEX_AUTH_URL}/pins`, {
     method: 'POST',
     headers: {
@@ -42,7 +42,11 @@ export async function getPlexAuthUrl(clientId) {
 
   const data = await response.json();
   
-  const authUrl = `https://app.plex.tv/auth#?clientID=${clientId}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
+  let authUrl = `https://app.plex.tv/auth#?clientID=${clientId}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
+  
+  if (forwardUrl) {
+    authUrl += `&forwardUrl=${encodeURIComponent(forwardUrl)}`;
+  }
   
   return {
     pinId: data.id,

@@ -17,25 +17,45 @@ export default function Login() {
 
   const [plexPopup, setPlexPopup] = useState(null);
 
+  function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (window.innerWidth <= 768);
+  }
+
   async function handlePlexLogin() {
     setLoading(true);
     try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
+      const mobile = isMobile();
+      const forwardUrl = mobile ? window.location.origin + '/login' : null;
+      const { authUrl } = await loginWithPlex(forwardUrl);
       
-      const { authUrl } = await loginWithPlex();
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
+      if (mobile) {
+        // Mobile: Plex will redirect back to forwardUrl after auth
+        sessionStorage.setItem('plexAuthPending', 'true');
+        window.location.href = authUrl;
+      } else {
+        // Desktop: use popup
+        const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
+        setPlexPopup(popup);
+        if (popup && !popup.closed) {
+          popup.location.href = authUrl;
+        }
+        setPolling(true);
       }
-      setPolling(true);
     } catch (error) {
       console.error('Failed to start Plex login:', error);
       setLoading(false);
     }
   }
+
+  // Check for pending auth on mount (mobile redirect flow)
+  useEffect(() => {
+    if (sessionStorage.getItem('plexAuthPending')) {
+      sessionStorage.removeItem('plexAuthPending');
+      setLoading(true);
+      setPolling(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!polling) return;

@@ -29,20 +29,37 @@ export default function Setup() {
   const [testing, setTesting] = useState({ overseerr: false, tautulli: false });
   const [testResult, setTestResult] = useState({ overseerr: null, tautulli: null });
 
+  function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (window.innerWidth <= 768);
+  }
+
+  // Check for pending auth on mount (mobile redirect flow)
+  useEffect(() => {
+    if (sessionStorage.getItem('plexSetupAuthPending')) {
+      sessionStorage.removeItem('plexSetupAuthPending');
+      setPolling(true);
+    }
+  }, []);
+
   async function handlePlexLogin() {
     setError(null);
     try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
+      const mobile = isMobile();
+      const forwardUrl = mobile ? window.location.origin + '/setup' : null;
+      const { authUrl } = await api.post('/setup/plex-auth', { forwardUrl });
       
-      const { authUrl } = await api.post('/setup/plex-auth');
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
+      if (mobile) {
+        sessionStorage.setItem('plexSetupAuthPending', 'true');
+        window.location.href = authUrl;
+      } else {
+        const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
+        setPlexPopup(popup);
+        if (popup && !popup.closed) {
+          popup.location.href = authUrl;
+        }
+        setPolling(true);
       }
-      setPolling(true);
     } catch (err) {
       setError(err.message);
     }

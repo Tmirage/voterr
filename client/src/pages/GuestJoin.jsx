@@ -25,8 +25,23 @@ export default function GuestJoin() {
   const [pinLoading, setPinLoading] = useState(false);
   const pinRefs = useRef([]);
 
+  function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (window.innerWidth <= 768);
+  }
+
   useEffect(() => {
-    validateInvite();
+    // Check for pending Plex auth (mobile redirect flow)
+    const pendingToken = sessionStorage.getItem('plexGuestAuthToken');
+    if (pendingToken === token) {
+      sessionStorage.removeItem('plexGuestAuthToken');
+      setPlexLoading(true);
+      setPolling(true);
+      // Still need to validate invite to get movieNightId
+      validateInvite();
+    } else {
+      validateInvite();
+    }
   }, [token]);
 
   async function validateInvite(pinCode = null) {
@@ -101,17 +116,21 @@ export default function GuestJoin() {
   async function handlePlexLogin() {
     setPlexLoading(true);
     try {
-      // Open local loading page first (not blocked by popup blockers on mobile)
-      const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
-      setPlexPopup(popup);
+      const mobile = isMobile();
+      const forwardUrl = mobile ? window.location.origin + `/join/${token}` : null;
+      const { authUrl } = await loginWithPlex(forwardUrl);
       
-      const { authUrl } = await loginWithPlex();
-      
-      // Redirect popup to Plex auth URL
-      if (popup && !popup.closed) {
-        popup.location.href = authUrl;
+      if (mobile) {
+        sessionStorage.setItem('plexGuestAuthToken', token);
+        window.location.href = authUrl;
+      } else {
+        const popup = window.open('/plex-loading', 'PlexAuth', 'width=600,height=700');
+        setPlexPopup(popup);
+        if (popup && !popup.closed) {
+          popup.location.href = authUrl;
+        }
+        setPolling(true);
       }
-      setPolling(true);
     } catch (err) {
       console.error('Failed to start Plex login:', err);
       setPlexLoading(false);

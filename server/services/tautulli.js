@@ -1,7 +1,7 @@
 import { getSetting } from './settings.js';
 import { CircuitBreaker } from '../utils/circuitBreaker.js';
 
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 3000;
 const breaker = new CircuitBreaker('tautulli');
 
 export function getTautulliStatus() {

@@ -51,6 +51,24 @@ router.post('/plex-auth', rateLimit, async (req, res) => {
   }
   
   try {
+    // Validate forwardUrl to prevent open redirect attacks
+    let forwardUrl = null;
+    if (req.body.forwardUrl) {
+      try {
+        const url = new URL(req.body.forwardUrl);
+        const origin = req.get('origin') || req.get('referer');
+        if (origin) {
+          const originUrl = new URL(origin);
+          // Only allow redirect to same origin
+          if (url.origin === originUrl.origin) {
+            forwardUrl = req.body.forwardUrl;
+          }
+        }
+      } catch (e) {
+        // Invalid URL, ignore
+      }
+    }
+    
     const response = await fetch('https://plex.tv/api/v2/pins', {
       method: 'POST',
       headers: {
@@ -75,7 +93,11 @@ router.post('/plex-auth', rateLimit, async (req, res) => {
     req.session.setupPlexPinId = data.id;
     req.session.setupPlexCode = data.code;
 
-    const authUrl = `https://app.plex.tv/auth#?clientID=${PLEX_CLIENT_ID}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
+    let authUrl = `https://app.plex.tv/auth#?clientID=${PLEX_CLIENT_ID}&code=${data.code}&context%5Bdevice%5D%5Bproduct%5D=Voterr&context%5Bdevice%5D%5Bplatform%5D=Web&context%5Bdevice%5D%5Bdevice%5D=Voterr`;
+    
+    if (forwardUrl) {
+      authUrl += `&forwardUrl=${encodeURIComponent(forwardUrl)}`;
+    }
 
     res.json({
       pinId: data.id,
@@ -157,7 +179,8 @@ router.post('/complete', async (req, res) => {
 
     if (overseerrUrl && overseerrApiKey) {
       try {
-        const overseerrTest = await fetch(`${overseerrUrl}/api/v1/status`, {
+        // Use /settings/main which requires valid API key, not /status which is public
+        const overseerrTest = await fetch(`${overseerrUrl}/api/v1/settings/main`, {
           headers: { 'X-Api-Key': overseerrApiKey }
         });
         if (!overseerrTest.ok) {

@@ -46,7 +46,23 @@ setInterval(() => {
 
 router.get('/plex', rateLimit, async (req, res) => {
   try {
-    const { pinId, code, authUrl } = await getPlexAuthUrl(PLEX_CLIENT_ID);
+    // Validate forwardUrl to prevent open redirect attacks
+    let forwardUrl = null;
+    if (req.query.forwardUrl) {
+      try {
+        const url = new URL(req.query.forwardUrl);
+        const origin = req.get('origin') || req.get('referer');
+        if (origin) {
+          const originUrl = new URL(origin);
+          if (url.origin === originUrl.origin) {
+            forwardUrl = req.query.forwardUrl;
+          }
+        }
+      } catch (e) {
+        // Invalid URL, ignore
+      }
+    }
+    const { pinId, code, authUrl } = await getPlexAuthUrl(PLEX_CLIENT_ID, forwardUrl);
     
     req.session.plexPinId = pinId;
     req.session.plexCode = code;
