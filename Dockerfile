@@ -3,9 +3,8 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (better-sqlite3) and update npm
-RUN apk add --no-cache python3 make g++ && \
-    npm install -g npm@latest
+# Install build dependencies for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
 
 # Copy package files
 COPY package*.json ./
