@@ -1,4 +1,5 @@
 import { isAppAdmin } from '../utils/permissions.js';
+import { isSetupComplete } from '../services/settings.js';
 
 export function requireAuth(req, res, next) {
   if (!req.session.userId) {
@@ -8,6 +9,19 @@ export function requireAuth(req, res, next) {
 }
 
 export function requireAdmin(req, res, next) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!isAppAdmin(req.session)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
+export function requireAdminOrSetup(req, res, next) {
+  if (!isSetupComplete() && req.session.setupPlexToken) {
+    return next();
+  }
   if (!req.session.userId) {
     return res.status(401).json({ error: 'Authentication required' });
   }

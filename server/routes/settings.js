@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAdmin, requireAuth } from '../middleware/auth.js';
+import { requireAdmin, requireAuth, requireAdminOrSetup } from '../middleware/auth.js';
 import { getSetting, setSettings, getPlexToken } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
 import { retryTautulli, getTautulliStatus } from '../services/tautulli.js';
@@ -34,7 +34,7 @@ router.post('/', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/test/overseerr', requireAdmin, async (req, res) => {
+router.post('/test/overseerr', requireAdminOrSetup, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
@@ -57,7 +57,7 @@ router.post('/test/overseerr', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/test/tautulli', requireAdmin, async (req, res) => {
+router.post('/test/tautulli', requireAdminOrSetup, async (req, res) => {
   const { url, apiKey } = req.body;
 
   if (!url || !apiKey) {
