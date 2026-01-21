@@ -127,25 +127,28 @@ router.patch('/:id/admin', requireAdmin, (req, res) => {
   res.json({ success: true, isAdmin: newAdminStatus === 1 });
 });
 
-router.patch('/:id', requireAdmin, (req, res) => {
+router.patch('/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const { username, email } = req.body;
+  const { username } = req.body;
 
-  const user = db.prepare('SELECT id, is_local FROM users WHERE id = ?').get(id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+  const isSelf = parseInt(id) === req.session.userId;
+  const isAppAdmin = req.session.isAppAdmin;
+
+  if (!isSelf && !isAppAdmin) {
+    return res.status(403).json({ error: 'You can only edit your own profile' });
   }
 
-  if (!user.is_local) {
-    return res.status(400).json({ error: 'Only local users can be fully edited' });
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
   }
 
   if (!username || !username.trim()) {
     return res.status(400).json({ error: 'Username is required' });
   }
 
-  db.prepare('UPDATE users SET username = ?, email = ? WHERE id = ?').run(username.trim(), email || null, id);
-  res.json({ success: true, username: username.trim(), email: email || null });
+  db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username.trim(), id);
+  res.json({ success: true, username: username.trim() });
 });
 
 router.delete('/:id', requireAdmin, (req, res) => {

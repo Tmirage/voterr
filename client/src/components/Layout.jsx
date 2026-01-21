@@ -14,7 +14,8 @@ import {
   Command,
   AlertTriangle,
   RefreshCw,
-  Check
+  Check,
+  FileText
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
@@ -25,7 +26,8 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Groups', href: '/groups', icon: Users },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
-  { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true }
+  { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },
+  { name: 'Logs', href: '/logs', icon: FileText, adminOnly: true }
 ];
 
 export default function Layout({ children }) {
@@ -33,6 +35,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState({ groups: 0, movieNights: 0, users: 0 });
+  const [version, setVersion] = useState(null);
   const [serviceStatus, setServiceStatus] = useState({ overseerr: null, tautulli: null });
   const [retrying, setRetrying] = useState({ overseerr: false, tautulli: false });
   const [retrySuccess, setRetrySuccess] = useState({ overseerr: false, tautulli: false });
@@ -42,6 +45,19 @@ export default function Layout({ children }) {
       loadStats();
     }
   }, [user, location.pathname]);
+
+  useEffect(() => {
+    loadVersion();
+  }, []);
+
+  async function loadVersion() {
+    try {
+      const data = await api.get('/health');
+      setVersion(data.version);
+    } catch (error) {
+      // Ignore
+    }
+  }
 
   // Service status: load immediately on mount
   useEffect(() => {
@@ -309,6 +325,9 @@ export default function Layout({ children }) {
                 </button>
               </Tooltip>
             </div>
+            {version && (
+              <p className="px-3 mt-1 text-[10px] text-gray-500">v{version}</p>
+            )}
           </div>
         </div>
       </aside>

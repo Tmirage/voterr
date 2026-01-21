@@ -93,8 +93,8 @@ export default function Users() {
   async function saveEditUser() {
     if (!editForm.username.trim()) return;
     try {
-      await api.patch(`/users/${editingUser.id}`, editForm);
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, username: editForm.username.trim(), email: editForm.email || null } : u));
+      await api.patch(`/users/${editingUser.id}`, { username: editForm.username });
+      setUsers(users.map(u => u.id === editingUser.id ? { ...u, username: editForm.username.trim() } : u));
       setEditingUser(null);
     } catch (error) {
       console.error('Failed to update user:', error);
@@ -211,7 +211,42 @@ export default function Users() {
                 )}
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-white">{u.username}</p>
+                    {editingUser?.id === u.id ? (
+                      <form onSubmit={(e) => { e.preventDefault(); saveEditUser(); }} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editForm.username}
+                          onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                          className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-indigo-500 w-32"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelEditUser();
+                            }
+                          }}
+                        />
+                        <button type="submit" className="p-1 text-green-400 hover:text-green-300">
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button type="button" onClick={cancelEditUser} className="p-1 text-gray-400 hover:text-gray-300">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </form>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <p className="text-white">{u.username}</p>
+                        {!u.isLocal && (user.isAppAdmin || u.id === user.id) && (
+                          <button
+                            onClick={() => startEditUser(u)}
+                            className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
+                            title="Edit display name"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </span>
+                    )}
                     {u.isAppAdmin && (
                       <span className="px-1.5 py-0.5 text-xs rounded bg-purple-600/30 text-purple-300">App Admin</span>
                     )}
@@ -230,95 +265,34 @@ export default function Users() {
                   </div>
                 </div>
               </div>
-              {user.isAppAdmin && u.id !== user.id && !u.isAppAdmin && (
-                <div className="flex items-center gap-1">
-                  {u.isLocal && (
+              <div className="flex items-center gap-1">
+                {user.isAppAdmin && u.id !== user.id && !u.isAppAdmin && (
+                  <>
+                    {!u.isLocal && (
+                      <button
+                        onClick={() => handleToggleAdmin(u.id)}
+                        className={clsx(
+                          "p-2 transition-colors",
+                          u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
+                        )}
+                        title={u.isAdmin ? "Remove admin" : "Make admin"}
+                      >
+                        {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
+                      </button>
+                    )}
                     <button
-                      onClick={() => startEditUser(u)}
-                      className="p-2 text-gray-400 hover:text-gray-300 transition-colors"
-                      title="Edit user"
+                      onClick={() => handleDelete(u.id)}
+                      className="p-2 text-gray-400 hover:text-red-400 transition-colors"
                     >
-                      <Pencil className="h-5 w-5" />
+                      <Trash2 className="h-5 w-5" />
                     </button>
-                  )}
-                  {!u.isLocal && (
-                    <button
-                      onClick={() => handleToggleAdmin(u.id)}
-                      className={clsx(
-                        "p-2 transition-colors",
-                        u.isAdmin ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-indigo-400"
-                      )}
-                      title={u.isAdmin ? "Remove admin" : "Make admin"}
-                    >
-                      {u.isAdmin ? <Shield className="h-5 w-5" /> : <ShieldOff className="h-5 w-5" />}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDelete(u.id)}
-                    className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
       </div>
-
-      {editingUser && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              cancelEditUser();
-            }
-          }}
-        >
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl text-white mb-4">Edit User</h2>
-            <form onSubmit={(e) => { e.preventDefault(); saveEditUser(); }} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Username</label>
-                <input
-                  type="text"
-                  value={editForm.username}
-                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Email (optional)</label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div className="flex gap-3 justify-end items-center">
-                <button
-                  type="button"
-                  onClick={cancelEditUser}
-                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors flex items-center gap-2"
-                >
-                  Cancel
-                  {!isTouch() && <kbd className="text-[10px] px-1.5 py-0.5 bg-gray-700 rounded">Esc</kbd>}
-                </button>
-                <button
-                  type="submit"
-                  disabled={!editForm.username.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
-                >
-                  Save
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {showAddLocal && (
         <div 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { getPlexAuthUrl, checkPlexPin, getPlexUser, getPlexFriends } from '../services/plex.js';
 import { getSetting } from '../services/settings.js';
+import { logger } from '../services/logger.js';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ function rateLimit(req, res, next) {
   
   entry.count++;
   if (entry.count > RATE_LIMIT) {
+    logger.warn('auth', 'Rate limit exceeded', { ip }, req);
     return res.status(429).json({ error: 'Too many requests. Try again later.' });
   }
   
@@ -85,6 +87,7 @@ router.get('/plex/callback', async (req, res) => {
           const isFriend = friends.some(f => f.id === plexUser.id.toString());
           
           if (!isFriend) {
+            logger.warn('auth', 'Access denied - not a Plex friend', { plexId: plexUser.id, username: plexUser.username }, req);
             return res.status(403).json({ error: 'Access denied. You must be a Plex friend of the server owner.' });
           }
         }
@@ -117,6 +120,8 @@ router.get('/plex/callback', async (req, res) => {
     
     delete req.session.plexPinId;
     delete req.session.plexCode;
+
+    logger.info('auth', 'User logged in', { userId: user.id, username: user.username }, req);
 
     res.json({ 
       authenticated: true,
@@ -164,6 +169,8 @@ router.get('/me', (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
+  const userId = req.session.userId;
+  logger.info('auth', 'User logged out', { userId }, req);
   req.session.destroy();
   res.json({ success: true });
 });
