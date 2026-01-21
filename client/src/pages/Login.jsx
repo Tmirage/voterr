@@ -23,25 +23,24 @@ export default function Login() {
     setLoading(true);
     setError(null);
     
-    try {
-      // Prepare popup first (avoids popup blocker)
-      plexOAuth.preparePopup();
-      
-      // Start OAuth flow - this polls until we get a token
-      const authToken = await plexOAuth.login();
-      
-      // Send token to backend to create session
-      const userData = await api.post('/auth/plex', { authToken });
-      
-      setUser(userData);
-      navigate('/');
-    } catch (err) {
-      console.error('Plex login failed:', err);
-      if (err.message !== 'Login cancelled') {
-        setError(err.message || 'Login failed');
+    // Prepare popup first (opens to local loading page to avoid popup blockers)
+    plexOAuth.preparePopup();
+    
+    // Wait 1.5s then start OAuth flow (like Overseerr does)
+    setTimeout(async () => {
+      try {
+        const authToken = await plexOAuth.login();
+        const userData = await api.post('/auth/plex', { authToken });
+        setUser(userData);
+        navigate('/');
+      } catch (err) {
+        console.error('Plex login failed:', err);
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          setError(err.message || 'Login failed');
+        }
+        setLoading(false);
       }
-      setLoading(false);
-    }
+    }, 1500);
   }
 
   return (

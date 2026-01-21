@@ -35,21 +35,22 @@ export default function Setup() {
     setError(null);
     setPlexLoading(true);
     
-    try {
-      plexOAuth.preparePopup();
-      const authToken = await plexOAuth.login();
-      
-      // Store token for setup completion, get user info
-      const result = await api.post('/setup/plex-auth', { authToken });
-      setPlexUser(result.user);
-      setCurrentStep(1);
-    } catch (err) {
-      if (err.message !== 'Login cancelled') {
-        setError(err.message);
+    plexOAuth.preparePopup();
+    
+    setTimeout(async () => {
+      try {
+        const authToken = await plexOAuth.login();
+        const result = await api.post('/setup/plex-auth', { authToken });
+        setPlexUser(result.user);
+        setCurrentStep(1);
+      } catch (err) {
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          setError(err.message);
+        }
+      } finally {
+        setPlexLoading(false);
       }
-    } finally {
-      setPlexLoading(false);
-    }
+    }, 1500);
   }
 
   async function handleComplete() {

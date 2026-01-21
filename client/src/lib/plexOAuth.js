@@ -60,6 +60,28 @@ class PlexOAuth {
     return this.pin;
   }
 
+  preparePopup() {
+    // Open popup to local loading page first to avoid popup blockers
+    const width = 600;
+    const height = 700;
+    const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+    const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+    const screenWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
+    const screenHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
+    const left = screenWidth / 2 - width / 2 + dualScreenLeft;
+    const top = screenHeight / 2 - height / 2 + dualScreenTop;
+
+    this.popup = window.open(
+      '/plex-loading',
+      'PlexAuth',
+      `scrollbars=yes,width=${width},height=${height},top=${top},left=${left}`
+    );
+    
+    if (this.popup) {
+      this.popup.focus();
+    }
+  }
+
   async login() {
     this.initializeHeaders();
     await this.getPin();
@@ -68,29 +90,33 @@ class PlexOAuth {
       throw new Error('Unable to login - not initialized');
     }
 
-    const params = new URLSearchParams({
+    const params = {
       clientID: this.headers['X-Plex-Client-Identifier'],
       code: this.pin.code,
       'context[device][product]': 'Voterr',
+      'context[device][version]': '1.0.0',
       'context[device][platform]': 'Web',
-      'context[device][device]': 'Voterr'
-    });
+      'context[device][platformVersion]': '',
+      'context[device][device]': navigator.platform || 'Web',
+      'context[device][deviceName]': 'Voterr',
+      'context[device][model]': 'Plex OAuth',
+      'context[device][screenResolution]': `${window.screen.width}x${window.screen.height}`,
+      'context[device][layout]': 'desktop'
+    };
 
-    const authUrl = `https://app.plex.tv/auth#?${params.toString()}`;
+    const authUrl = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
 
-    // Open popup directly to Plex auth URL
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
-
-    this.popup = window.open(
-      authUrl,
-      'PlexAuth',
-      `scrollbars=yes,width=${width},height=${height},top=${top},left=${left}`
-    );
+    if (this.popup) {
+      this.popup.location.href = authUrl;
+    }
 
     return this.pollForToken();
+  }
+
+  encodeData(data) {
+    return Object.keys(data)
+      .map(key => [key, data[key]].map(encodeURIComponent).join('='))
+      .join('&');
   }
 
   async pollForToken() {
@@ -116,7 +142,7 @@ class PlexOAuth {
             this.closePopup();
             resolve(data.authToken);
           } else if (this.popup?.closed) {
-            reject(new Error('Login cancelled'));
+            reject(new Error('Popup closed without completing login'));
           } else {
             setTimeout(poll, 1000);
           }

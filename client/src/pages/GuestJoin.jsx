@@ -101,21 +101,23 @@ export default function GuestJoin() {
 
   async function handlePlexLogin() {
     setPlexLoading(true);
-    try {
-      plexOAuth.preparePopup();
-      const authToken = await plexOAuth.login();
-      
-      // Send token to backend and join via invite
-      await api.post('/auth/plex', { authToken });
-      await api.post('/invites/plex-join', { token });
-      navigate(`/movie-night/${invite.movieNightId}`);
-    } catch (err) {
-      if (err.message !== 'Login cancelled') {
-        console.error('Failed to start Plex login:', err);
-        setError(err.message);
+    
+    plexOAuth.preparePopup();
+    
+    setTimeout(async () => {
+      try {
+        const authToken = await plexOAuth.login();
+        await api.post('/auth/plex', { authToken });
+        await api.post('/invites/plex-join', { token });
+        navigate(`/movie-night/${invite.movieNightId}`);
+      } catch (err) {
+        if (err.message !== 'Login cancelled' && err.message !== 'Popup closed without completing login') {
+          console.error('Failed to start Plex login:', err);
+          setError(err.message);
+        }
+        setPlexLoading(false);
       }
-      setPlexLoading(false);
-    }
+    }, 1500);
   }
 
   async function handleLocalJoin() {
