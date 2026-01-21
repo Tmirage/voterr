@@ -60,19 +60,6 @@ class PlexOAuth {
     return this.pin;
   }
 
-  preparePopup() {
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
-
-    this.popup = window.open(
-      '/plex-loading',
-      'PlexAuth',
-      `scrollbars=yes,width=${width},height=${height},top=${top},left=${left}`
-    );
-  }
-
   async login() {
     this.initializeHeaders();
     await this.getPin();
@@ -91,9 +78,17 @@ class PlexOAuth {
 
     const authUrl = `https://app.plex.tv/auth#?${params.toString()}`;
 
-    if (this.popup && !this.popup.closed) {
-      this.popup.location.href = authUrl;
-    }
+    // Open popup directly to Plex auth URL
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.innerWidth - width) / 2;
+    const top = window.screenY + (window.innerHeight - height) / 2;
+
+    this.popup = window.open(
+      authUrl,
+      'PlexAuth',
+      `scrollbars=yes,width=${width},height=${height},top=${top},left=${left}`
+    );
 
     return this.pollForToken();
   }
