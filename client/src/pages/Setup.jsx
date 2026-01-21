@@ -31,6 +31,27 @@ export default function Setup() {
   const [testing, setTesting] = useState({ overseerr: false, tautulli: false });
   const [testResult, setTestResult] = useState({ overseerr: null, tautulli: null });
 
+  // Check for pending Plex auth (mobile redirect flow)
+  useEffect(() => {
+    async function checkPendingAuth() {
+      try {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setPlexLoading(true);
+          const result = await api.post('/setup/plex-auth', { authToken });
+          setPlexUser(result.user);
+          setCurrentStep(1);
+          setPlexLoading(false);
+        }
+      } catch (err) {
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+        setPlexLoading(false);
+      }
+    }
+    checkPendingAuth();
+  }, []);
+
   async function handlePlexLogin() {
     setError(null);
     setPlexLoading(true);
@@ -39,7 +60,8 @@ export default function Setup() {
     
     setTimeout(async () => {
       try {
-        const authToken = await plexOAuth.login();
+        const forwardUrl = window.location.origin + '/setup';
+        const authToken = await plexOAuth.login(forwardUrl);
         const result = await api.post('/setup/plex-auth', { authToken });
         setPlexUser(result.user);
         setCurrentStep(1);

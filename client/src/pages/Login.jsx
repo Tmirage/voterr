@@ -13,6 +13,25 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Check for pending Plex auth (mobile redirect flow)
+  useEffect(() => {
+    async function checkPendingAuth() {
+      try {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setLoading(true);
+          const userData = await api.post('/auth/plex', { authToken });
+          setUser(userData);
+          navigate('/');
+        }
+      } catch (err) {
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+      }
+    }
+    checkPendingAuth();
+  }, []);
+
   useEffect(() => {
     if (user) {
       navigate('/');
@@ -23,13 +42,17 @@ export default function Login() {
     setLoading(true);
     setError(null);
     
-    // Prepare popup first (opens to local loading page to avoid popup blockers)
+    // Prepare popup (only opens on desktop)
     plexOAuth.preparePopup();
     
-    // Wait 1.5s then start OAuth flow (like Overseerr does)
+    // Wait 1.5s then start OAuth flow
     setTimeout(async () => {
       try {
-        const authToken = await plexOAuth.login();
+        // Pass forwardUrl for mobile redirect flow
+        const forwardUrl = window.location.origin + '/login';
+        const authToken = await plexOAuth.login(forwardUrl);
+        
+        // This only runs on desktop (mobile redirects away)
         const userData = await api.post('/auth/plex', { authToken });
         setUser(userData);
         navigate('/');

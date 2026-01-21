@@ -26,6 +26,26 @@ export default function GuestJoin() {
   const [pinLoading, setPinLoading] = useState(false);
   const pinRefs = useRef([]);
 
+  // Check for pending Plex auth (mobile redirect flow)
+  useEffect(() => {
+    async function checkPendingAuth() {
+      try {
+        const authToken = await plexOAuth.checkPinAfterRedirect();
+        if (authToken) {
+          setPlexLoading(true);
+          await api.post('/auth/plex', { authToken });
+          await api.post('/invites/plex-join', { token });
+          navigate(`/movie-night/${invite?.movieNightId}`);
+        }
+      } catch (err) {
+        console.error('Failed to complete Plex auth:', err);
+        setError('Login failed. Please try again.');
+        setPlexLoading(false);
+      }
+    }
+    checkPendingAuth();
+  }, [token, invite]);
+
   useEffect(() => {
     validateInvite();
   }, [token]);
@@ -106,7 +126,8 @@ export default function GuestJoin() {
     
     setTimeout(async () => {
       try {
-        const authToken = await plexOAuth.login();
+        const forwardUrl = window.location.origin + `/join/${token}`;
+        const authToken = await plexOAuth.login(forwardUrl);
         await api.post('/auth/plex', { authToken });
         await api.post('/invites/plex-join', { token });
         navigate(`/movie-night/${invite.movieNightId}`);

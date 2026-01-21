@@ -13,6 +13,11 @@ function uuidv4() {
   );
 }
 
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         (window.innerWidth <= 768);
+}
+
 class PlexOAuth {
   constructor() {
     this.pin = null;
@@ -61,7 +66,11 @@ class PlexOAuth {
   }
 
   preparePopup() {
-    // Open popup to local loading page first to avoid popup blockers
+    // Only prepare popup for desktop - mobile uses redirect
+    if (isMobile()) {
+      return;
+    }
+    
     const width = 600;
     const height = 700;
     const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
@@ -82,7 +91,7 @@ class PlexOAuth {
     }
   }
 
-  async login() {
+  async login(forwardUrl = null) {
     this.initializeHeaders();
     await this.getPin();
 
@@ -104,6 +113,23 @@ class PlexOAuth {
       'context[device][layout]': 'desktop'
     };
 
+    // Mobile: use forwardUrl redirect flow
+    if (isMobile() && forwardUrl) {
+      params.forwardUrl = forwardUrl;
+      
+      // Store PIN info for when user returns
+      sessionStorage.setItem('plex-pin-id', this.pin.id.toString());
+      sessionStorage.setItem('plex-pin-code', this.pin.code);
+      sessionStorage.setItem('plex-client-id', this.headers['X-Plex-Client-Identifier']);
+      
+      // Redirect entire page to Plex
+      window.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
+      
+      // Return a promise that never resolves (page will redirect)
+      return new Promise(() => {});
+    }
+
+    // Desktop: use popup + polling flow
     const authUrl = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
 
     if (this.popup) {
@@ -111,6 +137,42 @@ class PlexOAuth {
     }
 
     return this.pollForToken();
+  }
+
+  // Check PIN after returning from Plex redirect (mobile flow)
+  async checkPinAfterRedirect() {
+    const pinId = sessionStorage.getItem('plex-pin-id');
+    const clientId = sessionStorage.getItem('plex-client-id');
+    
+    if (!pinId || !clientId) {
+      return null;
+    }
+
+    // Clear stored PIN data
+    sessionStorage.removeItem('plex-pin-id');
+    sessionStorage.removeItem('plex-pin-code');
+    sessionStorage.removeItem('plex-client-id');
+
+    const headers = {
+      'Accept': 'application/json',
+      'X-Plex-Client-Identifier': clientId,
+      'X-Plex-Product': 'Voterr',
+      'X-Plex-Version': '1.0.0',
+      'X-Plex-Platform': 'Web',
+      'X-Plex-Device': navigator.platform || 'Web',
+      'X-Plex-Device-Name': 'Voterr'
+    };
+
+    const response = await fetch(`${PLEX_API}/pins/${pinId}`, {
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to check pin');
+    }
+
+    const data = await response.json();
+    return data.authToken || null;
   }
 
   encodeData(data) {
