@@ -25,8 +25,10 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Install minimal runtime dependencies and clean up in one layer
+# Install minimal runtime dependencies, fix CVEs, and clean up
 RUN apk upgrade --no-cache && \
+    apk add --no-cache --upgrade --repository=https://dl-cdn.alpinelinux.org/alpine/edge/main \
+        busybox zlib && \
     apk add --no-cache tini libstdc++ su-exec && \
     rm -rf /var/cache/apk/*
 
