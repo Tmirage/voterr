@@ -403,13 +403,13 @@ export default function Dashboard() {
                         )}
                       </div>
                     ) : (
-                      <AnimatedList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      <AnimatedList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {sortedNominations.map((nomination, index) => {
                           return (
                           <div
                             key={nomination.id}
                             className={clsx(
-                              "bg-gray-700/50 rounded-xl p-2 flex flex-col",
+                              "bg-gray-700/50 rounded-xl p-2 flex flex-col overflow-hidden min-w-0",
                               nomination.isLeading && "ring-2 ring-indigo-500"
                             )}
                           >
@@ -454,23 +454,23 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className="mt-2 flex-1">
-                              {nomination.ratingKey && plexServerId && !user.isLocal && !user.isLocalInvite ? (
-                                <Tooltip content="Open in Plex">
+                            <div className="mt-2 flex-1 min-w-0">
+                              <Tooltip content={nomination.title}>
+                                {nomination.ratingKey && plexServerId && !user.isLocal && !user.isLocalInvite ? (
                                   <a
                                     href={`https://app.plex.tv/desktop/#!/server/${plexServerId}/details?key=%2Flibrary%2Fmetadata%2F${nomination.ratingKey}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-white hover:text-orange-500 transition-colors"
+                                    className="flex items-center gap-1 text-white hover:text-orange-500 transition-colors overflow-hidden"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <Play className="h-3 w-3 flex-shrink-0" />
                                     <span className="text-sm truncate">{nomination.title}</span>
                                   </a>
-                                </Tooltip>
-                              ) : (
-                                <p className="text-white text-sm truncate">{nomination.title}</p>
-                              )}
+                                ) : (
+                                  <p className="text-white text-sm truncate">{nomination.title}</p>
+                                )}
+                              </Tooltip>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={clsx(
                                   "px-2.5 py-1 rounded text-sm",
