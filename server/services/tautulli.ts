@@ -45,6 +45,10 @@ export function getTautulliStatus(): ServiceStatus {
   return breaker.getStatus(configured);
 }
 
+export function resetTautulliCircuit(): void {
+  breaker.reset();
+}
+
 export async function retryTautulli(): Promise<RetryResult> {
   breaker.reset();
 

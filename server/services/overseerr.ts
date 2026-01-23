@@ -66,6 +66,10 @@ export function getOverseerrStatus(): ServiceStatus {
   return breaker.getStatus(configured);
 }
 
+export function resetOverseerrCircuit(): void {
+  breaker.reset();
+}
+
 export async function retryOverseerr(): Promise<RetryResult> {
   breaker.reset();
 

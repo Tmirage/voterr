@@ -3,8 +3,12 @@ import type { Request, Response } from 'express';
 import { requireAdmin, requireAuth, requireAdminOrSetup } from '../middleware/auth.js';
 import { getSetting, setSettings, getPlexToken } from '../services/settings.js';
 import { getCacheStats, clearCache } from '../services/imageCache.js';
-import { retryTautulli, getTautulliStatus } from '../services/tautulli.js';
-import { retryOverseerr, getOverseerrStatus } from '../services/overseerr.js';
+import { retryTautulli, getTautulliStatus, resetTautulliCircuit } from '../services/tautulli.js';
+import {
+  retryOverseerr,
+  getOverseerrStatus,
+  resetOverseerrCircuit,
+} from '../services/overseerr.js';
 import { clearPlexCache, getPlexServerAndLibrary } from './movies.js';
 import { getBody } from '../types/index.js';
 
@@ -55,9 +59,16 @@ router.post('/test/overseerr', requireAdminOrSetup, async (req: Request, res: Re
     return;
   }
 
+  const effectiveApiKey = apiKey.startsWith('•') ? getSetting('overseerr_api_key') : apiKey;
+
+  if (!effectiveApiKey) {
+    res.status(400).json({ error: 'API key is required' });
+    return;
+  }
+
   try {
     const response = await fetch(`${url}/api/v1/settings/main`, {
-      headers: { 'X-Api-Key': apiKey },
+      headers: { 'X-Api-Key': effectiveApiKey },
     });
 
     if (!response.ok) {
@@ -68,6 +79,7 @@ router.post('/test/overseerr', requireAdminOrSetup, async (req: Request, res: Re
     const statusRes = await fetch(`${url}/api/v1/status`);
     const statusData = (await statusRes.json()) as { version?: string };
 
+    resetOverseerrCircuit();
     res.json({ success: true, version: statusData.version });
   } catch {
     res.status(400).json({ error: 'Failed to connect. Check URL.' });
@@ -82,14 +94,22 @@ router.post('/test/tautulli', requireAdminOrSetup, async (req: Request, res: Res
     return;
   }
 
+  const effectiveApiKey = apiKey.startsWith('•') ? getSetting('tautulli_api_key') : apiKey;
+
+  if (!effectiveApiKey) {
+    res.status(400).json({ error: 'API key is required' });
+    return;
+  }
+
   try {
-    const response = await fetch(`${url}/api/v2?apikey=${apiKey}&cmd=arnold`);
+    const response = await fetch(`${url}/api/v2?apikey=${effectiveApiKey}&cmd=arnold`);
 
     if (!response.ok) {
       res.status(400).json({ error: 'Failed to connect. Check URL and API key.' });
       return;
     }
 
+    resetTautulliCircuit();
     res.json({ success: true });
   } catch {
     res.status(400).json({ error: 'Failed to connect. Check URL.' });
