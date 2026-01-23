@@ -1,8 +1,16 @@
 # Voterr
 
+[![Docker Hub](https://img.shields.io/docker/v/tmcrage904/voterr?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/tmcrage904/voterr)
+[![GitHub](https://img.shields.io/github/v/tag/Tmirage/voterr?label=GitHub&logo=github)](https://github.com/Tmirage/voterr)
+
 > **Note:** This project is currently in beta/work-in-progress. Features may change and bugs are expected. Feedback and contributions are welcome!
 
 A film voting platform for movie nights that integrates with your Plex ecosystem. Vote on movies, track who's watched what, and organize recurring movie nights with friends.
+
+## Links
+
+- [Docker Hub](https://hub.docker.com/r/tmcrage904/voterr)
+- [GitHub Repository](https://github.com/Tmirage/voterr)
 
 ## Screenshots
 
