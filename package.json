@@ -1,6 +1,6 @@
 {
   "name": "voterr",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "Film voting platform for movie nights - integrates with Plex, Overseerr, and Tautulli",
   "main": "server/index.js",
   "type": "module",
