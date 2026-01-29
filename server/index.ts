@@ -254,6 +254,17 @@ async function start(): Promise<void> {
       });
     }
 
+    // Global error handler for URIError and other uncaught errors
+    app.use((err: Error, req: Request, res: Response, _next: express.NextFunction) => {
+      if (err instanceof URIError) {
+        console.warn(`[URIError] Malformed URL from ${req.ip}: ${req.originalUrl}`);
+        res.status(400).json({ error: 'Bad request: malformed URL' });
+        return;
+      }
+      console.error('[Error]', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    });
+
     initScheduler();
 
     app.listen(PORT, () => {

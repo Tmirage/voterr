@@ -9,11 +9,8 @@ type NotificationCallback =
       circuitOpen?: boolean
     ) => number)
   | null;
-type PlexErrorCallback = ((error: { message?: string; details?: string }) => void) | null;
-
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let notificationCallback: NotificationCallback = null;
-let plexErrorCallback: PlexErrorCallback = null;
 let csrfToken: string | null = null;
 
 async function ensureCsrfToken(): Promise<string> {
@@ -25,12 +22,8 @@ async function ensureCsrfToken(): Promise<string> {
   return csrfToken as string;
 }
 
-export function setNotificationCallbacks(
-  onNotification: NotificationCallback,
-  onPlexError: PlexErrorCallback
-): void {
+export function setNotificationCallbacks(onNotification: NotificationCallback): void {
   notificationCallback = onNotification;
-  plexErrorCallback = onPlexError;
 }
 
 async function request<T = unknown>(
@@ -60,9 +53,6 @@ async function request<T = unknown>(
   try {
     response = await fetch(`${BASE_URL}${endpoint}`, options);
   } catch (err: unknown) {
-    if (plexErrorCallback) {
-      plexErrorCallback({ details: err instanceof Error ? err.message : 'Unknown error' });
-    }
     throw new Error('Network error - unable to reach server');
   }
 

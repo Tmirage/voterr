@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useVoting } from '../lib/useVoting';
@@ -53,8 +53,9 @@ interface MovieNightNomination {
 export default function MovieNight() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { clearRankingCountdown } = useNotifications();
   const voting = useVoting(Number(id));
+  const votingRef = useRef(voting);
+  votingRef.current = voting;
   const [night, setNight] = useState<{
     id: number;
     groupId: number;
@@ -117,43 +118,42 @@ export default function MovieNight() {
   const loadMovieNight = useCallback(
     async (isPolling = false) => {
       try {
-        const [nightData, votesResult] = await Promise.all([
-          api.get<{
-            id: number;
-            groupId: number;
-            groupName: string;
-            groupDescription: string | null;
-            groupImageUrl: string | null;
-            scheduleName: string | null;
-            date: string;
-            time: string;
-            status: string;
-            winningMovieId: number | null;
-            hostId: number | null;
-            hostName: string | null;
-            canVote: boolean;
-            canNominate: boolean;
-            canManage: boolean;
-            canChangeHost: boolean;
-            sharingEnabled: boolean;
-            isCancelled: boolean;
-            isArchived: boolean;
-            cancelReason: string | null;
-            members: Array<{ id: number; username: string; avatarUrl: string | null }>;
-            attendance: Array<{ id: number; userId: number; status: string }>;
-            userAttendance: string | null;
-          }>(`/schedules/movie-nights/${id}`),
-          api.get<{
+        const nightData = await api.get<{
+          id: number;
+          groupId: number;
+          groupName: string;
+          groupDescription: string | null;
+          groupImageUrl: string | null;
+          scheduleName: string | null;
+          date: string;
+          time: string;
+          status: string;
+          winningMovieId: number | null;
+          hostId: number | null;
+          hostName: string | null;
+          canVote: boolean;
+          canNominate: boolean;
+          canManage: boolean;
+          canChangeHost: boolean;
+          sharingEnabled: boolean;
+          isCancelled: boolean;
+          isArchived: boolean;
+          cancelReason: string | null;
+          members: Array<{ id: number; username: string; avatarUrl: string | null }>;
+          attendance: Array<{ id: number; userId: number; status: string }>;
+          userAttendance: string | null;
+        }>(`/schedules/movie-nights/${id}`);
+        setNight(nightData);
+
+        if (!isPolling) {
+          const votesResult = await api.get<{
             nominations: MovieNightNomination[];
             userRemainingVotes: number;
             maxVotesPerUser: number;
-          }>(`/votes/movie-night/${id}`),
-        ]);
-        setNight(nightData);
-        setNominations(votesResult.nominations);
-        setVotesData(votesResult);
-        if (!isPolling) {
-          voting.initialize(votesResult, nightData.winningMovieId);
+          }>(`/votes/movie-night/${id}`);
+          setNominations(votesResult.nominations);
+          setVotesData(votesResult);
+          votingRef.current.initialize(votesResult, nightData.winningMovieId);
         }
       } catch (err: unknown) {
         console.error('Failed to load movie night:', err);
@@ -161,7 +161,7 @@ export default function MovieNight() {
         setLoading(false);
       }
     },
-    [id, voting]
+    [id]
   );
 
   useEffect(() => {
@@ -173,9 +173,8 @@ export default function MovieNight() {
 
     return () => {
       clearInterval(interval);
-      clearRankingCountdown();
     };
-  }, [loadMovieNight, clearRankingCountdown]);
+  }, [loadMovieNight]);
 
   function handleVote(nominationId: number) {
     voting.vote(nominationId);
@@ -541,7 +540,7 @@ export default function MovieNight() {
           ) : (
             <AnimatedList className="divide-y divide-gray-700">
               {(voting.sortedNominations as MovieNightNomination[]).map((nomination, _index) => {
-                const topVoteCount = voting.sortedNominations[0]?.voteCount || 0;
+                const topVoteCount = Math.max(...voting.sortedNominations.map((n) => n.voteCount));
                 const isLeader =
                   topVoteCount > 0 &&
                   nomination.voteCount === topVoteCount &&

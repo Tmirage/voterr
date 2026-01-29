@@ -1,18 +1,11 @@
-import { Check, AlertTriangle, X, RefreshCw } from 'lucide-react';
+import { Check, AlertTriangle, X, RefreshCw, ArrowUpDown } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 import { api } from '../lib/api';
 
 export default function BottomToast() {
-  const {
-    bottomToast,
-    rankingCountdown,
-    executeRankingNow,
-    clearRankingCountdown,
-    notifications,
-    removeNotification,
-  } = useNotifications();
+  const { bottomToast, notifications, removeNotification, rankingCountdown, clearRankingCountdown } = useNotifications();
 
-  const hasContent = bottomToast || rankingCountdown || notifications.length > 0;
+  const hasContent = bottomToast || notifications.length > 0 || rankingCountdown;
   if (!hasContent) return null;
 
   async function handleRetry(service: string, notificationId: number) {
@@ -58,21 +51,23 @@ export default function BottomToast() {
         </div>
       )}
 
-      {rankingCountdown && (
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={executeRankingNow}
-            className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl shadow-lg flex items-center gap-2 transition-colors active:scale-95"
-          >
-            Update Position in {rankingCountdown.seconds}
-          </button>
+      {rankingCountdown && rankingCountdown.secondsLeft >= 0 && (
+        <div className="px-6 py-3 bg-gray-800 text-white rounded-xl shadow-lg flex items-center gap-3 pointer-events-auto">
+          <ArrowUpDown className="h-5 w-5 text-indigo-400" />
+          <span className="text-sm">Ranking updates in {rankingCountdown.secondsLeft}s</span>
           <button
             onClick={clearRankingCountdown}
-            className="p-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl shadow-lg transition-colors active:scale-95"
-            title="Cancel rerank"
+            className="ml-1 p-1 hover:bg-white/20 rounded transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {rankingCountdown && rankingCountdown.secondsLeft < 0 && (
+        <div className="px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg flex items-center gap-2 pointer-events-auto">
+          <Check className="h-5 w-5" />
+          <span className="text-sm">Ranking updated</span>
         </div>
       )}
     </div>

@@ -27,7 +27,8 @@ interface BottomToastState {
 }
 
 interface RankingCountdownState {
-  seconds: number;
+  secondsLeft: number;
+  onComplete: () => Promise<void> | void;
 }
 
 interface NotificationContextType {
@@ -46,8 +47,7 @@ interface NotificationContextType {
   bottomToast: BottomToastState | null;
   showVotesCast: () => void;
   rankingCountdown: RankingCountdownState | null;
-  showRankingCountdown: (seconds: number, onComplete: () => void) => void;
-  executeRankingNow: () => void;
+  showRankingCountdown: (onComplete: () => Promise<void> | void) => void;
   clearRankingCountdown: () => void;
 }
 
@@ -62,7 +62,9 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const [plexError, setPlexError] = useState<PlexError | null>(null);
   const [bottomToast, setBottomToast] = useState<BottomToastState | null>(null);
   const [rankingCountdown, setRankingCountdown] = useState<RankingCountdownState | null>(null);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCompleteRef = useRef<(() => Promise<void> | void) | null>(null);
 
   const addNotification = useCallback(
     (
@@ -106,65 +108,66 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     setTimeout(() => setBottomToast(null), 3000);
   }, []);
 
-  const onCompleteRef = useRef<(() => void) | null>(null);
-
-  const showRankingCountdown = useCallback((seconds: number, onComplete: () => void) => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-    }
-    onCompleteRef.current = onComplete;
-    setRankingCountdown({ seconds });
-    countdownRef.current = setInterval(() => {
-      setRankingCountdown((prev) => {
-        if (!prev || prev.seconds <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          countdownRef.current = null;
-          setTimeout(() => {
-            if (onCompleteRef.current) {
-              onCompleteRef.current();
-              onCompleteRef.current = null;
-            }
-          }, 0);
-          return null;
-        }
-        return { ...prev, seconds: prev.seconds - 1 };
-      });
-    }, 1000);
-  }, []);
-
-  const executeRankingNow = useCallback(() => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
-    setRankingCountdown(null);
-    if (onCompleteRef.current) {
-      onCompleteRef.current();
-      onCompleteRef.current = null;
-    }
-  }, []);
-
   const clearRankingCountdown = useCallback(() => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (countdownTimeoutRef.current) {
+      clearTimeout(countdownTimeoutRef.current);
+      countdownTimeoutRef.current = null;
     }
     onCompleteRef.current = null;
     setRankingCountdown(null);
   }, []);
 
-  useEffect(() => {
-    setNotificationCallbacks(addNotification, showPlexError);
-    return () => setNotificationCallbacks(null, null);
-  }, [addNotification, showPlexError]);
+  const showRankingCountdown = useCallback(
+    (onComplete: () => Promise<void> | void) => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      if (countdownTimeoutRef.current) {
+        clearTimeout(countdownTimeoutRef.current);
+      }
+      onCompleteRef.current = onComplete;
+      
+      let secondsLeft = 4;
+      setRankingCountdown({ secondsLeft, onComplete });
+
+      countdownIntervalRef.current = setInterval(() => {
+        secondsLeft -= 1;
+        if (secondsLeft < 0) {
+          clearInterval(countdownIntervalRef.current!);
+          countdownIntervalRef.current = null;
+        } else {
+          setRankingCountdown({ secondsLeft, onComplete: onCompleteRef.current! });
+        }
+      }, 1000);
+
+      countdownTimeoutRef.current = setTimeout(async () => {
+        countdownTimeoutRef.current = null;
+        const callback = onCompleteRef.current;
+        onCompleteRef.current = null;
+        await callback?.();
+        setRankingCountdown({ secondsLeft: -1, onComplete: () => {} });
+        setTimeout(() => setRankingCountdown(null), 1500);
+      }, 5000);
+    },
+    []
+  );
 
   useEffect(() => {
+    setNotificationCallbacks(addNotification);
     return () => {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
+      setNotificationCallbacks(null);
+      if (countdownTimeoutRef.current) {
+        clearTimeout(countdownTimeoutRef.current);
+      }
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
       }
     };
-  }, []);
+  }, [addNotification]);
 
   return (
     <NotificationContext.Provider
@@ -179,7 +182,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         showVotesCast,
         rankingCountdown,
         showRankingCountdown,
-        executeRankingNow,
         clearRankingCountdown,
       }}
     >

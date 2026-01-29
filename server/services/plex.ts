@@ -1,4 +1,5 @@
 import { getProxiedImageUrl } from './imageCache.js';
+import { logger } from './logger.js';
 
 const PLEX_AUTH_URL = 'https://plex.tv/api/v2';
 const TIMEOUT_MS = 10000;
@@ -71,9 +72,12 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
     return response;
   } catch (err: unknown) {
     clearTimeout(timeoutId);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     if (err instanceof Error && err.name === 'AbortError') {
+      logger.error('plex', 'Plex request timed out', { url: url.split('?')[0] });
       throw new Error('Plex request timed out');
     }
+    logger.error('plex', 'Plex request failed', { url: url.split('?')[0], error: errorMessage });
     throw err;
   }
 }
