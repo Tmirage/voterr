@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, refreshCsrfToken } from '../lib/api';
+import { api } from '../lib/api';
 import PlexOAuth from '../lib/plexOAuth';
 import { Film } from 'lucide-react';
 
@@ -52,40 +52,15 @@ export default function Login() {
     setLoading(true);
     setError(null);
 
-    // Prepare popup (only opens on desktop)
-    plexOAuth.preparePopup();
-
-    // Wait 1.5s then start OAuth flow
-    setTimeout(async () => {
-      try {
-        // Pass forwardUrl for mobile redirect flow
-        const forwardUrl = window.location.origin + '/login';
-        const authToken = await plexOAuth.login(forwardUrl);
-
-        // This only runs on desktop (mobile redirects away)
-        // Refresh CSRF token before auth request - session may have changed
-        refreshCsrfToken();
-        const userData = await api.post<{
-          id: number;
-          username: string;
-          email: string;
-          avatarUrl: string;
-          isAdmin: boolean;
-          isAppAdmin: boolean;
-          isLocal: boolean;
-          plexId: string;
-        }>('/auth/plex', { authToken });
-        setUser(userData);
-        navigate('/');
-      } catch (err: unknown) {
-        console.error('Plex login failed:', err);
-        const message = err instanceof Error ? err.message : 'Login failed';
-        if (message !== 'Login cancelled' && message !== 'Popup closed without completing login') {
-          setError(message);
-        }
-        setLoading(false);
-      }
-    }, 1500);
+    try {
+      const forwardUrl = window.location.origin + '/login';
+      await plexOAuth.login(forwardUrl);
+    } catch (err: unknown) {
+      console.error('Plex login failed:', err);
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message);
+      setLoading(false);
+    }
   }
 
   return (

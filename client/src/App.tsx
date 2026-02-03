@@ -13,7 +13,6 @@ const Users = lazy(() => import('./pages/Users'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Logs = lazy(() => import('./pages/Logs'));
 const GuestJoin = lazy(() => import('./pages/GuestJoin'));
-const PlexLoading = lazy(() => import('./pages/PlexLoading'));
 
 function PageLoader() {
   return (
@@ -115,7 +114,6 @@ export default function App() {
           }
         />
         <Route path="/join/:token" element={<GuestJoin />} />
-        <Route path="/plex-loading" element={<PlexLoading />} />
         <Route
           path="/*"
           element={

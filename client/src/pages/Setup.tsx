@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, refreshCsrfToken } from '../lib/api';
+import { api } from '../lib/api';
 import PlexOAuth from '../lib/plexOAuth';
 import { Film, Check, ChevronRight, Server, Database, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
@@ -80,28 +80,14 @@ export default function Setup() {
     setError(null);
     setPlexLoading(true);
 
-    plexOAuth.preparePopup();
-
-    setTimeout(async () => {
-      try {
-        const forwardUrl = window.location.origin + '/setup';
-        const authToken = await plexOAuth.login(forwardUrl);
-        refreshCsrfToken();
-        const result = await api.post<{ user: { username: string; email: string; thumb: string } }>(
-          '/setup/plex-auth',
-          { authToken }
-        );
-        setPlexUser(result.user);
-        setCurrentStep(1);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Login failed';
-        if (message !== 'Login cancelled' && message !== 'Popup closed without completing login') {
-          setError(message);
-        }
-      } finally {
-        setPlexLoading(false);
-      }
-    }, 1500);
+    try {
+      const forwardUrl = window.location.origin + '/setup';
+      await plexOAuth.login(forwardUrl);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message);
+      setPlexLoading(false);
+    }
   }
 
   async function handleComplete() {

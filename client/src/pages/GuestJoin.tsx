@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api, refreshCsrfToken } from '../lib/api';
+import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import PlexOAuth from '../lib/plexOAuth';
 import { Film, Calendar, Clock, Users, Trophy, XCircle, Lock } from 'lucide-react';
@@ -151,25 +151,15 @@ export default function GuestJoin() {
   async function handlePlexLogin() {
     setPlexLoading(true);
 
-    plexOAuth.preparePopup();
-
-    setTimeout(async () => {
-      try {
-        const forwardUrl = window.location.origin + `/join/${token}`;
-        const authToken = await plexOAuth.login(forwardUrl);
-        refreshCsrfToken();
-        await api.post('/auth/plex', { authToken });
-        await api.post('/invites/plex-join', { token });
-        navigate(`/movie-night/${invite?.movieNightId}`);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Login failed';
-        if (message !== 'Login cancelled' && message !== 'Popup closed without completing login') {
-          console.error('Failed to start Plex login:', err);
-          setError(message);
-        }
-        setPlexLoading(false);
-      }
-    }, 1500);
+    try {
+      const forwardUrl = window.location.origin + `/join/${token}`;
+      await plexOAuth.login(forwardUrl);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      console.error('Failed to start Plex login:', err);
+      setError(message);
+      setPlexLoading(false);
+    }
   }
 
   async function handleLocalJoin() {

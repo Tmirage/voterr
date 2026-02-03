@@ -24,16 +24,8 @@ function uuidv4(): string {
   });
 }
 
-function isMobile(): boolean {
-  return (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    window.innerWidth <= 768
-  );
-}
-
 class PlexOAuth {
   private pin: PlexPin | null = null;
-  private popup: Window | null = null;
   private headers: PlexHeaders | null = null;
 
   initializeHeaders(): void {
@@ -76,33 +68,7 @@ class PlexOAuth {
     return this.pin;
   }
 
-  preparePopup(): void {
-    if (isMobile()) {
-      return;
-    }
-
-    const width = 600;
-    const height = 700;
-    const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
-    const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
-    const screenWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
-    const screenHeight =
-      window.innerHeight || document.documentElement.clientHeight || screen.height;
-    const left = screenWidth / 2 - width / 2 + dualScreenLeft;
-    const top = screenHeight / 2 - height / 2 + dualScreenTop;
-
-    this.popup = window.open(
-      '/plex-loading',
-      'PlexAuth',
-      `scrollbars=yes,width=${width},height=${height},top=${top},left=${left}`
-    );
-
-    if (this.popup) {
-      this.popup.focus();
-    }
-  }
-
-  async login(forwardUrl: string | null = null): Promise<string> {
+  async login(forwardUrl: string): Promise<void> {
     this.initializeHeaders();
     await this.getPin();
 
@@ -113,6 +79,7 @@ class PlexOAuth {
     const params: Record<string, string> = {
       clientID: this.headers['X-Plex-Client-Identifier'],
       code: this.pin.code,
+      forwardUrl,
       'context[device][product]': 'Voterr',
       'context[device][version]': '1.0.0',
       'context[device][platform]': 'Web',
@@ -124,33 +91,11 @@ class PlexOAuth {
       'context[device][layout]': 'desktop',
     };
 
-    if (isMobile() && forwardUrl) {
-      params.forwardUrl = forwardUrl;
+    sessionStorage.setItem('plex-pin-id', this.pin.id.toString());
+    sessionStorage.setItem('plex-pin-code', this.pin.code);
+    sessionStorage.setItem('plex-client-id', this.headers['X-Plex-Client-Identifier']);
 
-      sessionStorage.setItem('plex-pin-id', this.pin.id.toString());
-      sessionStorage.setItem('plex-pin-code', this.pin.code);
-      sessionStorage.setItem('plex-client-id', this.headers['X-Plex-Client-Identifier']);
-
-      window.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
-
-      return new Promise(() => {});
-    }
-
-    const authUrl = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
-
-    if (this.popup) {
-      this.popup.location.href = authUrl;
-    } else {
-      // Popup was blocked - fall back to redirect flow like mobile
-      params.forwardUrl = forwardUrl || window.location.href;
-      sessionStorage.setItem('plex-pin-id', this.pin.id.toString());
-      sessionStorage.setItem('plex-pin-code', this.pin.code);
-      sessionStorage.setItem('plex-client-id', this.headers['X-Plex-Client-Identifier']);
-      window.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
-      return new Promise(() => {});
-    }
-
-    return this.pollForToken();
+    window.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
   }
 
   async checkPinAfterRedirect(): Promise<string | null> {
@@ -191,57 +136,6 @@ class PlexOAuth {
     return Object.keys(data)
       .map((key) => [key, data[key]].map(encodeURIComponent).join('='))
       .join('&');
-  }
-
-  private pollForToken(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const poll = async (): Promise<void> => {
-        try {
-          if (!this.pin) {
-            reject(new Error('No pin initialized'));
-            return;
-          }
-
-          console.log('Polling Plex pin:', this.pin.id);
-          const response = await fetch(`${PLEX_API}/pins/${this.pin.id}`, {
-            headers: this.headers as unknown as Record<string, string>,
-          });
-
-          console.log('Poll response status:', response.status);
-
-          if (!response.ok) {
-            const text = await response.text();
-            console.error('Poll failed:', response.status, text);
-            throw new Error('Failed to check pin');
-          }
-
-          const data: { authToken?: string } = await response.json();
-          console.log('Poll data:', data.authToken ? 'token received' : 'no token yet');
-
-          if (data.authToken) {
-            this.closePopup();
-            resolve(data.authToken);
-          } else if (this.popup?.closed) {
-            reject(new Error('Popup closed without completing login'));
-          } else {
-            setTimeout(poll, 1000);
-          }
-        } catch (err: unknown) {
-          console.error('Poll error:', err);
-          this.closePopup();
-          reject(err);
-        }
-      };
-
-      poll();
-    });
-  }
-
-  closePopup(): void {
-    if (this.popup && !this.popup.closed) {
-      this.popup.close();
-    }
-    this.popup = null;
   }
 }
 
