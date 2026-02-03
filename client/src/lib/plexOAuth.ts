@@ -140,6 +140,14 @@ class PlexOAuth {
 
     if (this.popup) {
       this.popup.location.href = authUrl;
+    } else {
+      // Popup was blocked - fall back to redirect flow like mobile
+      params.forwardUrl = forwardUrl || window.location.href;
+      sessionStorage.setItem('plex-pin-id', this.pin.id.toString());
+      sessionStorage.setItem('plex-pin-code', this.pin.code);
+      sessionStorage.setItem('plex-client-id', this.headers['X-Plex-Client-Identifier']);
+      window.location.href = `https://app.plex.tv/auth/#!?${this.encodeData(params)}`;
+      return new Promise(() => {});
     }
 
     return this.pollForToken();

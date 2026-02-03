@@ -68,6 +68,10 @@ async function request<T = unknown>(
         return undefined as T;
       }
     }
+    if (response.status === 403) {
+      // CSRF token might be stale - clear it so it gets refreshed on next request
+      csrfToken = null;
+    }
     const errorData: { error?: string } = await response
       .json()
       .catch(() => ({ error: 'Request failed' }));

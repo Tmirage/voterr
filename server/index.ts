@@ -108,7 +108,7 @@ function setupRoutes(): void {
       }),
       secret: getSessionSecret(),
       resave: false,
-      saveUninitialized: false,
+      saveUninitialized: true,
       cookie: {
         secure: 'auto',
         httpOnly: true,
