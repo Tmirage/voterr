@@ -1,4 +1,3 @@
-import cron from 'node-cron';
 import db from '../db/index.js';
 import { getNextDateForRecurrence } from '../utils/date.js';
 
@@ -17,15 +16,10 @@ interface ExistingMovieNight {
 
 export function initScheduler(): void {
   generateUpcomingMovieNights();
-
-  cron.schedule('0 0 * * 0', () => {
-    generateUpcomingMovieNights();
-  });
-
   console.log('Scheduler initialized');
 }
 
-function generateUpcomingMovieNights(): void {
+export function generateUpcomingMovieNights(): void {
   const schedules = db
     .prepare(
       `
