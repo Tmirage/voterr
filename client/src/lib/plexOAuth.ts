@@ -202,15 +202,21 @@ class PlexOAuth {
             return;
           }
 
+          console.log('Polling Plex pin:', this.pin.id);
           const response = await fetch(`${PLEX_API}/pins/${this.pin.id}`, {
             headers: this.headers as unknown as Record<string, string>,
           });
 
+          console.log('Poll response status:', response.status);
+
           if (!response.ok) {
+            const text = await response.text();
+            console.error('Poll failed:', response.status, text);
             throw new Error('Failed to check pin');
           }
 
           const data: { authToken?: string } = await response.json();
+          console.log('Poll data:', data.authToken ? 'token received' : 'no token yet');
 
           if (data.authToken) {
             this.closePopup();
@@ -221,6 +227,7 @@ class PlexOAuth {
             setTimeout(poll, 1000);
           }
         } catch (err: unknown) {
+          console.error('Poll error:', err);
           this.closePopup();
           reject(err);
         }

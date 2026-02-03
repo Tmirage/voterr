@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
+import { api, refreshCsrfToken } from '../lib/api';
 import PlexOAuth from '../lib/plexOAuth';
 import { Film } from 'lucide-react';
 
@@ -63,6 +63,8 @@ export default function Login() {
         const authToken = await plexOAuth.login(forwardUrl);
 
         // This only runs on desktop (mobile redirects away)
+        // Refresh CSRF token before auth request - session may have changed
+        refreshCsrfToken();
         const userData = await api.post<{
           id: number;
           username: string;

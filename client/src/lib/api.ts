@@ -13,13 +13,17 @@ type NotificationCallback =
 let notificationCallback: NotificationCallback = null;
 let csrfToken: string | null = null;
 
-async function ensureCsrfToken(): Promise<string> {
-  if (!csrfToken) {
+async function ensureCsrfToken(forceRefresh = false): Promise<string> {
+  if (!csrfToken || forceRefresh) {
     const response = await fetch(`${BASE_URL}/csrf-token`, { credentials: 'include' });
     const data: { token: string } = await response.json();
     csrfToken = data.token;
   }
   return csrfToken as string;
+}
+
+export function refreshCsrfToken(): void {
+  csrfToken = null;
 }
 
 export function setNotificationCallbacks(onNotification: NotificationCallback): void {

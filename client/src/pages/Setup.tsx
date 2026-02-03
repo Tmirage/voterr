@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
+import { api, refreshCsrfToken } from '../lib/api';
 import PlexOAuth from '../lib/plexOAuth';
 import { Film, Check, ChevronRight, Server, Database, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
@@ -86,6 +86,7 @@ export default function Setup() {
       try {
         const forwardUrl = window.location.origin + '/setup';
         const authToken = await plexOAuth.login(forwardUrl);
+        refreshCsrfToken();
         const result = await api.post<{ user: { username: string; email: string; thumb: string } }>(
           '/setup/plex-auth',
           { authToken }
