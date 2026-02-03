@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useMultiVoting } from '../lib/useVoting';
@@ -99,8 +99,10 @@ interface DashboardData {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { clearRankingCountdown } = useNotifications();
   const voting = useMultiVoting();
+  const votingRef = useRef(voting);
+  votingRef.current = voting;
+
   const [groups, setGroups] = useState<DashboardGroup[]>([]);
   const [movieNights, setMovieNights] = useState<DashboardMovieNight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +125,7 @@ export default function Dashboard() {
 
         if (!isPolling) {
           data.movieNights.forEach((night) => {
-            voting.initialize(night.id, {
+            votingRef.current.initialize(night.id, {
               nominations: night.nominations,
               userRemainingVotes: night.userRemainingVotes,
               maxVotesPerUser: night.maxVotesPerUser,
@@ -138,7 +140,7 @@ export default function Dashboard() {
         setLoading(false);
       }
     },
-    [voting]
+    []
   );
 
   useEffect(() => {
@@ -148,9 +150,8 @@ export default function Dashboard() {
     }, 10000);
     return () => {
       clearInterval(interval);
-      clearRankingCountdown();
     };
-  }, [loadData, clearRankingCountdown]);
+  }, [loadData]);
 
   function getSortedNominations(night: DashboardMovieNight): DashboardNomination[] {
     const sorted = voting.getSorted(night.id) as DashboardNomination[];

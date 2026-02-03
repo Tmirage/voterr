@@ -8,6 +8,7 @@ import { buildWatchedCache, enrichNominations, sortAndMarkLeader } from '../util
 import { ensurePlexServerId } from './movies.js';
 import { getPlexToken } from '../services/settings.js';
 import { getPermissions } from '../utils/permissions.js';
+import { generateUpcomingMovieNights } from '../services/scheduler.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 interface GroupRow {
@@ -82,6 +83,8 @@ const router = Router();
 router.get('/', requireNonGuest, async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const userId = authReq.session.userId!;
+
+  generateUpcomingMovieNights();
 
   const groups = db
     .prepare(

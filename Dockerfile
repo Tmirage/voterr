@@ -17,8 +17,8 @@ RUN cd client && npm ci
 # Copy source code
 COPY . .
 
-# Build frontend
-RUN cd client && npm run build
+# Build server and frontend
+RUN npm run build
 
 # Production stage - minimal runtime image
 FROM node:22-alpine
@@ -40,9 +40,9 @@ RUN npm ci --omit=dev --ignore-scripts && \
 # Copy prebuilt better-sqlite3 from builder (includes native binary)
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
-# Copy built frontend and server code
+# Copy built frontend and compiled server
 COPY --from=builder /app/client/dist ./client/dist
-COPY --from=builder /app/server ./server
+COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script and setup
 COPY docker-entrypoint.sh /docker-entrypoint.sh
@@ -58,4 +58,4 @@ ENV PGID=1000
 EXPOSE 5056
 
 ENTRYPOINT ["/sbin/tini", "--", "/docker-entrypoint.sh"]
-CMD ["node", "server/index.js"]
+CMD ["node", "dist/index.js"]
